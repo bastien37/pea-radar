@@ -1,0 +1,121 @@
+ticker,name,pea
+AC.PA,Accor,1
+AI.PA,Air Liquide,1
+AIR.PA,Airbus,1
+MT.AS,ArcelorMittal,1
+CS.PA,AXA,1
+BNP.PA,BNP Paribas,1
+EN.PA,Bouygues,1
+BVI.PA,Bureau Veritas,1
+CAP.PA,Capgemini,1
+CA.PA,Carrefour,1
+ACA.PA,Crédit Agricole,1
+BN.PA,Danone,1
+DSY.PA,Dassault Systèmes,1
+EDEN.PA,Edenred,1
+ENGI.PA,Engie,1
+EL.PA,EssilorLuxottica,1
+ERF.PA,Eurofins Scientific,1
+RMS.PA,Hermès,1
+KER.PA,Kering,1
+LR.PA,Legrand,1
+OR.PA,L'Oréal,1
+MC.PA,LVMH,1
+ML.PA,Michelin,1
+ORA.PA,Orange,1
+RI.PA,Pernod Ricard,1
+PUB.PA,Publicis,1
+RNO.PA,Renault,1
+SAF.PA,Safran,1
+SGO.PA,Saint-Gobain,1
+SAN.PA,Sanofi,1
+SU.PA,Schneider Electric,1
+GLE.PA,Société Générale,1
+STLAP.PA,Stellantis,1
+STMPA.PA,STMicroelectronics,1
+TEP.PA,Teleperformance,1
+HO.PA,Thales,1
+TTE.PA,TotalEnergies,1
+URW.PA,Unibail-Rodamco-Westfield,0
+VIE.PA,Veolia,1
+DG.PA,Vinci,1
+ADP.PA,Aéroports de Paris,1
+AF.PA,Air France-KLM,1
+ALO.PA,Alstom,1
+AMUN.PA,Amundi,1
+AKE.PA,Arkema,1
+AYV.PA,Ayvens,1
+BB.PA,Bic,1
+BIM.PA,bioMérieux,1
+BOL.PA,Bolloré,1
+CAN.PA,Canal+,1
+CARM.PA,Carmila,0
+COFA.PA,Coface,1
+COV.PA,Covivio,0
+AM.PA,Dassault Aviation,1
+DBG.PA,Derichebourg,1
+FGR.PA,Eiffage,1
+ELIOR.PA,Elior,1
+ELIS.PA,Elis,1
+EMEIS.PA,Emeis,1
+ERA.PA,Eramet,1
+RF.PA,Eurazeo,1
+ENX.PA,Euronext,1
+ETL.PA,Eutelsat,1
+EXA.PA,Exail Technologies,1
+EXENS.PA,Exosens,1
+FDJU.PA,FDJ United,1
+FRVIA.PA,Forvia,1
+GFC.PA,Gecina,0
+GET.PA,Getlink,1
+GTT.PA,GTT,1
+ICAD.PA,Icade,0
+IDL.PA,ID Logistics,1
+NK.PA,Imerys,1
+ITP.PA,Interparfums,1
+IPN.PA,Ipsen,1
+IPS.PA,Ipsos,1
+DEC.PA,JCDecaux,1
+LI.PA,Klépierre,0
+MMB.PA,Lagardère,1
+LSS.PA,Lectra,1
+LOUP.PA,Louis Hachette Group,1
+MAU.PA,Maurel & Prom,1
+MERY.PA,Mercialys,0
+MRN.PA,Mersen,1
+MMT.PA,M6 Métropole Télévision,1
+NEX.PA,Nexans,1
+NXI.PA,Nexity,1
+POM.PA,OPmobility,1
+OVH.PA,OVHcloud,1
+PEUG.PA,Peugeot Invest,1
+PLNW.PA,Planisware,1
+PLX.PA,Pluxee,1
+RCO.PA,Rémy Cointreau,1
+RXL.PA,Rexel,1
+RUI.PA,Rubis,1
+DIM.PA,Sartorius Stedim Biotech,1
+SCR.PA,Scor,1
+SK.PA,SEB,1
+SESG.PA,SES,1
+SW.PA,Sodexo,1
+SOI.PA,Soitec,1
+SOP.PA,Sopra Steria,1
+SPIE.PA,Spie,1
+TE.PA,Technip Energies,1
+TFI.PA,TF1,1
+TKO.PA,Tikehau Capital,1
+TRI.PA,Trigano,1
+UBI.PA,Ubisoft,1
+FR.PA,Valeo,1
+VK.PA,Vallourec,1
+VLA.PA,Valneva,1
+VRLA.PA,Verallia,1
+VCT.PA,Vicat,1
+VIRP.PA,Virbac,1
+VIRI.PA,Viridien,1
+VIV.PA,Vivendi,1
+VU.PA,Vusion,1
+WAVE.PA,Wavestone,1
+MF.PA,Wendel,1
+WLN.PA,Worldline,1
