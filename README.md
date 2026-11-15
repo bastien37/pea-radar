@@ -24,6 +24,9 @@ npm install
 npm run dev
 ```
 
+Relancer `npm install` après chaque `git pull` qui ajoute une dépendance, sinon le serveur de
+développement refuse de démarrer.
+
 Sous Windows PowerShell : une commande par ligne (`&&` n'existe pas en 5.1), `Copy-Item` à la
 place de `cp`, et `npm.cmd` si la stratégie d'exécution bloque `npm`.
 
