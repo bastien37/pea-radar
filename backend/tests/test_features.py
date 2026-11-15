@@ -12,6 +12,7 @@ from app.models import Alert, Position, Scan, User
 from app.services import scheduler
 from app.services import simulation as sim
 from app.services.alerts import after_scan
+from tests.conftest import CREDS
 
 
 def test_migrations_match_models():
@@ -183,7 +184,7 @@ def test_scheduler_runs_once_per_weekday(auth_client, monkeypatch):
 
 def test_email_needs_configuration_and_uses_starttls(monkeypatch):
     from app.services import alerts
-    assert alerts.send_email("a@b.fr", "s", "b") is False
+    assert "Aucun serveur d'envoi" in alerts.try_send("a@b.fr", "s", "b")
     monkeypatch.setattr(get_settings(), "smtp_host", "smtp.example.com")
     monkeypatch.setattr(get_settings(), "smtp_from", "radar@example.com")
     log = []
@@ -196,8 +197,38 @@ def test_email_needs_configuration_and_uses_starttls(monkeypatch):
         def send_message(self, msg): log.append(("send", msg["To"], msg["Subject"]))
 
     monkeypatch.setattr(alerts.smtplib, "SMTP", FakeSMTP)
-    assert alerts.send_email("a@b.fr", "sujet", "corps") is True
+    assert alerts.try_send("a@b.fr", "sujet", "corps") is None
     assert log == [("connect", "smtp.example.com", 587), "starttls", ("send", "a@b.fr", "sujet")]
+
+    class Refusing(FakeSMTP):
+        def send_message(self, msg):
+            raise alerts.smtplib.SMTPAuthenticationError(535, b"basic authentication is disabled")
+
+    monkeypatch.setattr(alerts.smtplib, "SMTP", Refusing)
+    error = alerts.try_send("a@b.fr", "sujet", "corps")
+    assert "basic authentication is disabled" in error and "SMTPAuthenticationError" in error
+
+
+def test_email_test_endpoint(auth_client, monkeypatch):
+    from app.config import get_settings
+    assert auth_client.get("/api/alerts/email").json()["configured"] is False
+    assert auth_client.post("/api/alerts/email/test").status_code == 400
+    monkeypatch.setattr(get_settings(), "smtp_host", "smtp.example.com")
+    monkeypatch.setattr(get_settings(), "smtp_from", "radar@example.com")
+    assert auth_client.get("/api/alerts/email").json() == {
+        "configured": True, "host": "smtp.example.com", "port": 587,
+        "sender": "radar@example.com", "authenticated": False}
+    sent = []
+    # la route importe try_send directement : c'est le nom du module d'API qu'il faut remplacer
+    monkeypatch.setattr("app.api.alerts.try_send", lambda to, s, b: sent.append(to))
+    r = auth_client.post("/api/alerts/email/test")
+    assert r.status_code == 200 and r.json()["sent_to"] == sent[0] == CREDS["email"]
+    monkeypatch.setattr("app.api.alerts.try_send", lambda *a: "SMTPAuthenticationError : 535")
+    r = auth_client.post("/api/alerts/email/test")
+    assert r.status_code == 502 and "535" in r.json()["detail"]
+    for _ in range(5):
+        auth_client.post("/api/alerts/email/test")
+    assert auth_client.post("/api/alerts/email/test").status_code == 429
 
 
 def test_backtest_api(auth_client):

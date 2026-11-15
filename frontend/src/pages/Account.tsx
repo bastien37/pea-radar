@@ -1,5 +1,53 @@
-import { type FormEvent, useState } from "react";
-import { api } from "../api";
+import { type FormEvent, useEffect, useState } from "react";
+import { api, type EmailSettings } from "../api";
+
+function EmailAlerts() {
+  const [settings, setSettings] = useState<EmailSettings | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.get<EmailSettings>("/alerts/email").then(setSettings).catch(() => undefined);
+  }, []);
+
+  const test = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await api.post<{ sent_to: string }>("/alerts/email/test");
+      setResult({ ok: true, text: `E-mail envoyé à ${r.sent_to}. Vérifiez votre boîte, et les indésirables.` });
+    } catch (err) {
+      setResult({ ok: false, text: (err as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card account">
+      <h3>Alertes par e-mail</h3>
+      {settings === null ? <p className="muted">Chargement…</p> : settings.configured ? (
+        <p className="muted small">
+          Serveur d'envoi : {settings.host}:{settings.port}, expéditeur {settings.sender}
+          {settings.authenticated ? ", avec authentification" : ", sans authentification"}.
+          Les alertes des scans vous sont envoyées en plus d'être affichées dans l'application.
+        </p>
+      ) : (
+        <p className="muted small">
+          Aucun serveur d'envoi configuré : les alertes restent visibles dans l'application.
+          Renseignez <code>SMTP_HOST</code>, <code>SMTP_FROM</code>, <code>SMTP_USER</code> et{" "}
+          <code>SMTP_PASSWORD</code> dans <code>backend/.env</code>, puis relancez le serveur.
+          Une adresse Outlook, Hotmail ou Live ne peut pas servir d'expéditeur : Microsoft n'accepte
+          plus l'authentification par mot de passe pour ces comptes.
+        </p>
+      )}
+      {result && <p className={result.ok ? "card ok" : "error"}>{result.text}</p>}
+      <button type="button" className="ghost" onClick={test} disabled={busy || !settings}>
+        {busy ? "Envoi…" : "Envoyer un e-mail de test"}
+      </button>
+    </div>
+  );
+}
 
 export default function Account() {
   const [current, setCurrent] = useState("");
@@ -46,6 +94,7 @@ export default function Account() {
         {message && <p className={message.ok ? "card ok" : "error"}>{message.text}</p>}
         <button disabled={busy}>Enregistrer</button>
       </form>
+      <EmailAlerts />
     </>
   );
 }

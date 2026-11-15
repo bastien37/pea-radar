@@ -76,6 +76,7 @@ backend/   FastAPI, SQLAlchemy, Alembic, environnement uv
 | POST/GET | `/api/backtests/walkforward`, `/walkforward/latest` | validation walk-forward |
 | GET/POST | `/api/etfs`, `/api/etfs/simulate`, `/api/etfs/goal` | ETF et indices, plans, mode objectif |
 | POST | `/api/auth/password` | changement de mot de passe (révoque les autres sessions) |
+| GET/POST | `/api/alerts/email`, `/api/alerts/email/test` | configuration d'envoi, e-mail de test |
 | GET/POST | `/api/alerts`, `/api/alerts/read` | alertes |
 
 ## Méthode d'analyse
@@ -159,8 +160,10 @@ fondamentaux et actualités non rejoués, exécution sans décalage de cours.
 - **Scan planifié** : `SCAN_SCHEDULE=18:30` lance un scan chaque jour ouvré (heure de Paris),
   tant que le serveur tourne.
 - **Alertes** : nouvelles entrées dans le top, positions au stop / à l'objectif / à l'échéance,
-  opérations du suivi automatique. Visibles dans l'application, et envoyées par e-mail si
-  `SMTP_*` est renseigné.
+  opérations du suivi automatique. Visibles dans l'application, et envoyées à l'adresse du compte
+  si `SMTP_*` est renseigné (STARTTLS exigé). L'écran Compte indique la configuration détectée et
+  envoie un e-mail de test. Une adresse Outlook, Hotmail ou Live ne peut pas servir d'expéditeur :
+  Microsoft n'accepte plus l'authentification par mot de passe pour ces comptes.
 - **Fiscalité** : gain net si tout était retiré aujourd'hui — 31,4 % avant 5 ans (12,8 % d'impôt
   sur le revenu + 18,6 % de prélèvements sociaux), 18,6 % après (taux 2026, modifiables dans `.env`).
 - **Pertinence** : chaque recommandation est comparée au gain annoncé une fois sa durée écoulée.

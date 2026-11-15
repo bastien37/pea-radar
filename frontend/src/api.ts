@@ -225,3 +225,7 @@ export interface Goal {
   scenarios: { label: string; note: string; monthly: number; invested: number }[];
   worst_case_monthly: number;
 }
+
+export interface EmailSettings {
+  configured: boolean; host: string; port: number; sender: string; authenticated: boolean;
+}

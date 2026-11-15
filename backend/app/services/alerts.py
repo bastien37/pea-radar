@@ -75,23 +75,43 @@ def _auto_follow(db: Session, user: User, scan: Scan, created: list[Alert]) -> N
              f"Suivi auto : achat de {qty} {opp.name} à {quote[0]:.2f} € (rang {opp.rank})", created)
 
 
-def send_email(to: str, subject: str, body: str) -> bool:
+class EmailNotConfigured(RuntimeError):
+    pass
+
+
+def send_email(to: str, subject: str, body: str) -> None:
+    """Envoie un e-mail, ou lève EmailNotConfigured / OSError / smtplib.SMTPException."""
     s = get_settings()
     if not (s.smtp_host and s.smtp_from):
-        return False
+        raise EmailNotConfigured("Aucun serveur d'envoi configuré (SMTP_HOST et SMTP_FROM)")
     msg = EmailMessage()
     msg["From"], msg["To"], msg["Subject"] = s.smtp_from, to, subject
     msg.set_content(body)
+    with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=20) as smtp:
+        smtp.starttls()  # refuse d'envoyer identifiants et contenu en clair
+        if s.smtp_user and s.smtp_password:
+            smtp.login(s.smtp_user, s.smtp_password.get_secret_value())
+        smtp.send_message(msg)
+
+
+def email_status() -> dict:
+    s = get_settings()
+    return {"configured": bool(s.smtp_host and s.smtp_from),
+            "host": s.smtp_host, "port": s.smtp_port, "sender": s.smtp_from,
+            "authenticated": bool(s.smtp_user)}
+
+
+def try_send(to: str, subject: str, body: str) -> str | None:
+    """Comme send_email, mais retourne le message d'erreur au lieu de le lever."""
     try:
-        with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=20) as smtp:
-            smtp.starttls()  # refuse d'envoyer identifiants et contenu en clair
-            if s.smtp_user and s.smtp_password:
-                smtp.login(s.smtp_user, s.smtp_password.get_secret_value())
-            smtp.send_message(msg)
-        return True
+        send_email(to, subject, body)
+    except EmailNotConfigured as exc:
+        return str(exc)
     except (smtplib.SMTPException, OSError) as exc:
-        log.warning("Envoi de l'e-mail d'alerte impossible : %s", type(exc).__name__)
-        return False
+        # le détail du serveur aide au diagnostic ; il ne contient pas le mot de passe
+        log.warning("Envoi d'e-mail impossible : %s", exc)
+        return f"{type(exc).__name__} : {exc}"[:300]
+    return None
 
 
 def after_scan(scan_id: int) -> list[str]:
@@ -126,5 +146,6 @@ def after_scan(scan_id: int) -> list[str]:
         messages = [a.message for a in created]
         email = user.email
     if messages:
-        send_email(email, f"PEA Radar : {len(messages)} alerte(s)", "\n".join(f"- {m}" for m in messages))
+        try_send(email, f"PEA Radar : {len(messages)} alerte(s)",
+                 "\n".join(f"- {m}" for m in messages))
     return messages
