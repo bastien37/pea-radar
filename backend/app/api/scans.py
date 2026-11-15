@@ -20,6 +20,7 @@ def _opp_out(o: Opportunity) -> dict:
         "id": o.id, "rank": o.rank, "ticker": o.ticker, "name": o.name, "price": o.price,
         "price_date": o.price_date, "score": o.score, "adjusted_score": o.adjusted_score,
         "risk_level": o.risk_level, "risk_label": o.details.get("risk_label"),
+        "sector": o.details.get("sector"),
         "expected_gain_pct": o.expected_gain_pct, "gain_low_pct": o.gain_low_pct,
         "gain_high_pct": o.gain_high_pct, "win_rate": o.win_rate,
         "holding_days": o.holding_days, "stop_loss": o.stop_loss,
@@ -29,10 +30,11 @@ def _opp_out(o: Opportunity) -> dict:
 
 def _scan_out(scan: Scan, full: bool = True) -> dict:
     out = {"id": scan.id, "status": scan.status, "progress": scan.progress, "error": scan.error,
-           "started_at": scan.started_at, "finished_at": scan.finished_at}
+           "started_at": scan.started_at, "finished_at": scan.finished_at, "trigger": scan.trigger}
     if full:
         out["opportunities"] = [_opp_out(o) for o in scan.opportunities]
         out["ranking"] = scan.ranking
+        out["market"] = scan.market or {"regime": None, "etfs": []}
     return out
 
 

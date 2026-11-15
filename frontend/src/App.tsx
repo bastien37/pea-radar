@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api, type User } from "./api";
+import Backtest from "./pages/Backtest";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Simulation from "./pages/Simulation";
@@ -25,6 +26,7 @@ export default function App() {
         <nav>
           <NavLink to="/" end>Opportunités</NavLink>
           <NavLink to="/simulation">Simulation</NavLink>
+          <NavLink to="/backtest">Backtest</NavLink>
         </nav>
         <span className="muted small">{user.email}</span>
         <button className="ghost" onClick={logout}>Déconnexion</button>
@@ -34,6 +36,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/titre/:ticker" element={<Stock />} />
           <Route path="/simulation" element={<Simulation />} />
+          <Route path="/backtest" element={<Backtest />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

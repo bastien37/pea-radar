@@ -1,12 +1,13 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, eur, pct, type Portfolio, type Track, type Trade } from "../api";
+import Tuto from "../Tuto";
 
 export default function Simulation() {
   const [pf, setPf] = useState<Portfolio | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [track, setTrack] = useState<Track | null>(null);
-  const [stocks, setStocks] = useState<{ ticker: string; name: string }[]>([]);
+  const [stocks, setStocks] = useState<{ ticker: string; name: string; is_etf: boolean }[]>([]);
   const [ticker, setTicker] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState("");
@@ -25,7 +26,7 @@ export default function Simulation() {
 
   useEffect(() => {
     refresh();
-    api.get<{ ticker: string; name: string }[]>("/stocks").then((s) => {
+    api.get<{ ticker: string; name: string; is_etf: boolean }[]>("/stocks").then((s) => {
       const sorted = [...s].sort((a, b) => a.name.localeCompare(b.name, "fr"));
       setStocks(sorted);
       setTicker(sorted[0]?.ticker ?? "");
@@ -40,6 +41,15 @@ export default function Simulation() {
       setError((e as Error).message);
     }
     refresh();
+  };
+
+  const saveSettings = async (body: { auto_follow?: boolean; pea_opened_on?: string }) => {
+    setError("");
+    try {
+      setPf(await api.post<Portfolio>("/portfolio/settings", body));
+    } catch (e) {
+      setError((e as Error).message);
+    }
   };
 
   const reset = async () => {
@@ -64,7 +74,10 @@ export default function Simulation() {
           <h1>Simulation</h1>
           <p className="muted">Argent fictif · ordres au dernier cours de clôture · frais de {(pf.fee_rate * 100).toLocaleString("fr-FR")} % par ordre</p>
         </div>
-        <button className="ghost" onClick={reset}>Réinitialiser</button>
+        <div className="actions">
+          <Tuto topic="simulation" />
+          <button className="ghost" onClick={reset}>Réinitialiser</button>
+        </div>
       </section>
       {error && <p className="error">{error}</p>}
 
@@ -77,12 +90,38 @@ export default function Simulation() {
         <div className="card"><span className="muted small">Plus-values réalisées</span>
           <strong className={pf.realized_pnl >= 0 ? "pos" : "neg"}>{eur(pf.realized_pnl)}</strong>
           <span className="muted small">dont {eur(pf.fees_paid)} de frais</span></div>
+        <div className="card"><span className="muted small">Net d'impôt si retrait aujourd'hui</span>
+          <strong className={pf.tax.net_gain >= 0 ? "pos" : "neg"}>{eur(pf.tax.net_gain)}</strong>
+          <span className="muted small">
+            {pf.tax.tax > 0 ? `${eur(pf.tax.tax)} d'impôts (${pf.tax.rate_pct.toLocaleString("fr-FR")} %)` : "aucun impôt sans gain"}
+            {" · "}PEA de {pf.tax.years.toLocaleString("fr-FR")} an{pf.tax.years >= 2 ? "s" : ""}
+          </span></div>
+      </div>
+
+      <div className="card settings">
+        <label className="check">
+          <input type="checkbox" checked={pf.auto_follow} onChange={(e) => saveSettings({ auto_follow: e.target.checked })} />
+          <span>
+            <strong>Suivi automatique</strong>
+            <span className="muted small"> — à chaque scan, vend les positions arrivées au stop, à l'objectif ou à l'échéance,
+              puis achète les meilleures opportunités ({pf.auto_follow_positions} lignes à parts égales).</span>
+          </span>
+        </label>
+        <label>Ouverture du PEA
+          <input type="date" value={pf.tax.pea_opened_on} max={new Date().toISOString().slice(0, 10)}
+                 onChange={(e) => e.target.value && saveSettings({ pea_opened_on: e.target.value })} />
+        </label>
       </div>
 
       <form className="card order" onSubmit={(e: FormEvent) => { e.preventDefault(); order("buy"); }}>
         <label>Titre
           <select value={ticker} onChange={(e) => setTicker(e.target.value)}>
-            {stocks.map((s) => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
+            <optgroup label="Actions">
+              {stocks.filter((s) => !s.is_etf).map((s) => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
+            </optgroup>
+            <optgroup label="ETF">
+              {stocks.filter((s) => s.is_etf).map((s) => <option key={s.ticker} value={s.ticker}>{s.name} ({s.ticker})</option>)}
+            </optgroup>
           </select>
         </label>
         <label>Quantité
@@ -97,13 +136,19 @@ export default function Simulation() {
       <div className="card scroll">
         {pf.positions.length === 0 ? <p className="muted">Aucune position.</p> : (
           <table>
-            <thead><tr><th>Titre</th><th>Qté</th><th>Prix de revient</th><th>Cours</th><th>Valeur</th><th>+/− latente</th><th /></tr></thead>
+            <thead><tr><th>Titre</th><th>Qté</th><th>Prix de revient</th><th>Cours</th><th>Valeur</th><th>+/− latente</th><th>Stop</th><th>Objectif</th><th>Avancement</th><th /></tr></thead>
             <tbody>
               {pf.positions.map((p) => (
                 <tr key={p.ticker}>
                   <td><Link to={`/titre/${p.ticker}`}>{p.name}</Link></td>
                   <td>{p.quantity}</td><td>{eur(p.avg_cost)}</td><td>{eur(p.price)}</td><td>{eur(p.value)}</td>
                   <td className={p.pnl >= 0 ? "pos" : "neg"}>{eur(p.pnl)} ({pct(p.pnl_pct, 2)})</td>
+                  <td>{p.stop_loss === null ? "—" : eur(p.stop_loss)}</td>
+                  <td>{p.target_price === null ? "—" : eur(p.target_price)}</td>
+                  <td>
+                    {p.holding_days ? `${p.elapsed_days ?? 0}/${p.holding_days} séances` : "—"}{" "}
+                    {p.trigger && <span className="tag neg">{p.trigger}</span>}
+                  </td>
                   <td><button className="ghost" onClick={() => order("sell", p.ticker, p.quantity)}>Tout vendre</button></td>
                 </tr>
               ))}

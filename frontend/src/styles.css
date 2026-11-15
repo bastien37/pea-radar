@@ -53,3 +53,24 @@ table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nu
 th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { color: var(--muted); font-weight: 500; font-size: .82rem; }
 .tag { border: 1px solid currentColor; border-radius: 999px; padding: .05rem .5rem; font-size: .8rem; }
+.actions { display: flex; gap: .6rem; align-items: center; }
+.tags { display: flex; gap: .3rem; flex-wrap: wrap; margin-top: .25rem; }
+.tags .tag { font-size: .72rem; color: var(--muted); } .tags .tag.neg { color: var(--neg); }
+.breakdown { margin: 0; } .breakdown strong { color: var(--text); }
+.funda { display: flex; flex-wrap: wrap; gap: .3rem 1rem; border-top: 1px solid var(--line); padding-top: .5rem; }
+.card.ok { border-color: var(--pos); } .card.warn { border-color: var(--warn); }
+.alerts header { display: flex; justify-content: space-between; align-items: center; }
+.alerts ul, .notes { margin: .5rem 0 0; padding-left: 1.1rem; } .alerts li { margin: .3rem 0; }
+.params { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .8rem; align-items: end; }
+.check { display: flex; gap: .5rem; align-items: flex-start; color: var(--text); }
+.check input { width: auto; margin-top: .25rem; }
+.settings { display: grid; grid-template-columns: 1fr 220px; gap: 1.5rem; align-items: center; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); gap: 1rem; }
+@media (max-width: 640px) { .settings { grid-template-columns: 1fr; } }
+dialog.tuto { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+  max-width: 720px; width: calc(100% - 2rem); max-height: 85vh; padding: 1.2rem 1.4rem; }
+dialog.tuto::backdrop { background: rgba(0, 0, 0, .6); }
+dialog.tuto header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+dialog.tuto h2 { margin: 0; }
+dialog.tuto dl > div { padding: .6rem 0; border-top: 1px solid var(--line); }
+dialog.tuto dt { font-weight: 600; } dialog.tuto dd { margin: .15rem 0 0; color: var(--muted); }

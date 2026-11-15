@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -7,10 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import auth, portfolio, scans, stocks
+from app.api import alerts, auth, backtests, portfolio, scans, stocks
 from app.config import get_settings
 from app.db import init_db
 from app.security import require_csrf_header
+from app.services.scheduler import scheduler_loop
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 FRONT_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -23,7 +25,10 @@ DOC_PATHS = ("/api/docs", "/api/openapi.json")
 async def lifespan(_: FastAPI):
     get_settings().signing_key()  # échoue tôt si la clé manque en production
     init_db()
+    task = asyncio.create_task(scheduler_loop()) if get_settings().scan_schedule else None
     yield
+    if task:
+        task.cancel()
 
 
 def create_app() -> FastAPI:
@@ -56,7 +61,7 @@ def create_app() -> FastAPI:
         return response
 
     api = APIRouter(prefix="/api", dependencies=[Depends(require_csrf_header)])
-    for module in (auth, scans, stocks, portfolio):
+    for module in (auth, scans, stocks, portfolio, backtests, alerts):
         api.include_router(module.router)
 
     @api.get("/health", tags=["system"])

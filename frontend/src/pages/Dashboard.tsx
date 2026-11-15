@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, eur, type Latest, type News, type Opportunity, pct, weeks } from "../api";
+import { type Alert, api, eur, type Latest, type News, type Opportunity, pct, weeks } from "../api";
+import Tuto from "../Tuto";
+
+const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`;
+const num = (n: number | null | undefined, suffix = "", scale = 1) =>
+  n === null || n === undefined ? "—" : `${(n * scale).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}${suffix}`;
 
 const SUB_LABELS: Record<string, string> = {
   trend: "Tendance", momentum: "Momentum", timing: "Point d'entrée",
@@ -51,7 +56,11 @@ function NewsBlock({ news }: { news: News }) {
 }
 
 function OpportunityCard({ o }: { o: Opportunity }) {
-  const est = o.details.estimate;
+  const d = o.details;
+  const est = d.estimate;
+  const f = d.fundamentals ?? {};
+  const fundBonus = (d.global_score ?? o.score) - o.score;
+  const newsBonus = o.adjusted_score - (d.global_score ?? o.score);
   return (
     <article className="card opp">
       <header>
@@ -59,11 +68,20 @@ function OpportunityCard({ o }: { o: Opportunity }) {
         <div>
           <h3><Link to={`/titre/${o.ticker}`}>{o.name}</Link></h3>
           <span className="muted small">{o.ticker} · {eur(o.price)} au {o.price_date}</span>
+          <div className="tags">
+            {o.sector && <span className="tag">{o.sector}</span>}
+            {d.earnings_warning && <span className="tag neg">Résultats dans {d.earnings_in_days} j</span>}
+            {d.market_unfavorable && <span className="tag neg">Marché baissier</span>}
+          </div>
         </div>
         <div className="score" title="Score technique ajusté de l'actualité">
           {o.adjusted_score.toFixed(0)}<span>/100</span>
         </div>
       </header>
+      <p className="small muted breakdown">
+        Technique <strong>{o.score.toFixed(0)}</strong> · Fondamentaux <strong>{d.fundamental_score == null ? "—" : signed(fundBonus)}</strong> ·
+        Actualité <strong>{o.news.status === "ok" ? signed(newsBonus) : "—"}</strong>
+      </p>
       <div className="kpis">
         <div><span className="muted small">Risque</span><Risk level={o.risk_level} label={o.risk_label} /></div>
         <div>
@@ -90,6 +108,13 @@ function OpportunityCard({ o }: { o: Opportunity }) {
           </div>
         ))}
       </div>
+      <div className="funda small">
+        <span><span className="muted">PER</span> {num(f.forward_pe ?? f.pe)}</span>
+        <span><span className="muted">Croissance</span> {num(f.earnings_growth, " %", 100)}</span>
+        <span><span className="muted">Dette</span> {num(f.debt_to_equity, " %")}</span>
+        <span><span className="muted">ROE</span> {num(f.roe, " %", 100)}</span>
+        <span><span className="muted">Dividende</span> {num(f.dividend_yield_pct, " %")}</span>
+      </div>
       <p className="muted small">
         {est.basis === "volatilité"
           ? "Historique insuffisant : estimation fondée sur la seule volatilité du titre."
@@ -104,12 +129,14 @@ function OpportunityCard({ o }: { o: Opportunity }) {
 export default function Dashboard() {
   const [data, setData] = useState<Latest | null>(null);
   const [error, setError] = useState("");
+  const [alerts, setAlerts] = useState<Alert[]>([]);
   const timer = useRef<number | undefined>(undefined);
 
   const load = useCallback(async () => {
     try {
       const latest = await api.get<Latest>("/scans/latest");
       setData(latest);
+      api.get<Alert[]>("/alerts").then((a) => setAlerts(a.filter((x) => !x.read))).catch(() => undefined);
       const st = latest.current?.status;
       if (st === "pending" || st === "running") timer.current = window.setTimeout(load, 2000);
     } catch (e) {
@@ -135,6 +162,8 @@ export default function Dashboard() {
   const cur = data?.current;
   const running = cur?.status === "pending" || cur?.status === "running";
   const result = data?.result;
+  const regime = result?.market?.regime;
+  const markRead = () => api.post("/alerts/read").then(() => setAlerts([])).catch(() => undefined);
 
   return (
     <>
@@ -146,21 +175,61 @@ export default function Dashboard() {
             {result?.finished_at && ` · dernier scan le ${new Date(result.finished_at).toLocaleString("fr-FR")}`}
           </p>
         </div>
-        <button onClick={start} disabled={running}>
-          {running ? cur?.progress || "Scan en cours…" : "Lancer un scan"}
-        </button>
+        <div className="actions">
+          <Tuto topic="opportunite" />
+          <button onClick={start} disabled={running}>
+            {running ? cur?.progress || "Scan en cours…" : "Lancer un scan"}
+          </button>
+        </div>
       </section>
+      {regime && (
+        <p className={`card ${regime.favorable ? "ok" : "warn"}`}>
+          <strong>Marché {regime.favorable ? "favorable" : "défavorable"}</strong> : le {regime.index} est{" "}
+          {Math.abs(regime.distance_pct).toLocaleString("fr-FR")} % {regime.favorable ? "au-dessus" : "en dessous"} de
+          sa moyenne 200 séances.{" "}
+          {regime.favorable ? "La tendance de fond soutient les signaux d'achat."
+            : "Les signaux d'achat échouent plus souvent dans ce contexte : le risque de chaque titre est relevé d'un cran."}
+        </p>
+      )}
+      {alerts.length > 0 && (
+        <div className="card alerts">
+          <header><h3>{alerts.length} alerte{alerts.length > 1 ? "s" : ""}</h3>
+            <button className="ghost" onClick={markRead}>Marquer comme lues</button></header>
+          <ul>{alerts.map((a) => <li key={a.id}><span className="tag">{a.kind}</span> {a.message}</li>)}</ul>
+        </div>
+      )}
       {error && <p className="error">{error}</p>}
       {cur?.status === "failed" && <p className="error">Le dernier scan a échoué : {cur.error}</p>}
-      {!result && !running && <p className="card muted">Aucun scan pour l'instant. Lancez-en un pour classer l'univers.</p>}
+      {!result && !running && <p className="card muted">Aucun scan pour l'instant. Lancez-en un pour classer l'univers ; le premier télécharge 15 ans de cours et peut prendre quelques minutes.</p>}
       {result && (
         <>
           <div className="grid">{result.opportunities.map((o) => <OpportunityCard key={o.id} o={o} />)}</div>
-          <h2>Classement complet</h2>
+          {result.market?.etfs?.length > 0 && (
+            <>
+              <h2>ETF éligibles PEA, pour comparaison</h2>
+              <div className="card scroll">
+                <table>
+                  <thead><tr><th>ETF</th><th>Indice</th><th>Cours</th><th>Perf. 3 mois</th><th>Perf. 1 an</th><th>Volatilité</th></tr></thead>
+                  <tbody>
+                    {result.market.etfs.map((e) => (
+                      <tr key={e.ticker}>
+                        <td><Link to={`/titre/${e.ticker}`}>{e.name}</Link> <span className="muted small">{e.ticker}</span></td>
+                        <td>{e.index}</td><td>{eur(e.price)}</td>
+                        <td className={e.perf_3m_pct >= 0 ? "pos" : "neg"}>{pct(e.perf_3m_pct)}</td>
+                        <td className={(e.perf_1y_pct ?? 0) >= 0 ? "pos" : "neg"}>{e.perf_1y_pct === null ? "—" : pct(e.perf_1y_pct)}</td>
+                        <td>{e.volatility_pct} %</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+          <h2>Classement technique complet</h2>
           <div className="card scroll">
             <table>
               <thead>
-                <tr><th>#</th><th>Titre</th><th>Cours</th><th>Score</th><th>Risque</th>
+                <tr><th>#</th><th>Titre</th><th>Secteur</th><th>Cours</th><th>Score</th><th>Risque</th>
                   <th>RSI</th><th>Stoch. %K</th><th>Perf. 3 mois</th><th>Volatilité</th></tr>
               </thead>
               <tbody>
@@ -168,6 +237,7 @@ export default function Dashboard() {
                   <tr key={r.ticker}>
                     <td>{r.rank}</td>
                     <td><Link to={`/titre/${r.ticker}`}>{r.name}</Link> <span className="muted small">{r.ticker}</span></td>
+                    <td className="muted small">{r.sector}</td>
                     <td>{eur(r.price)}</td>
                     <td><strong>{r.score.toFixed(1)}</strong></td>
                     <td><Risk level={r.risk_level} /></td>

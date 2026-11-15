@@ -1,8 +1,8 @@
 # PEA Radar
 
-Application web qui classe les actions du SBF 120 éligibles au PEA selon des indicateurs
-techniques, fait analyser l'actualité des 20 meilleures par un modèle gratuit d'OpenRouter,
-et permet de tester les recommandations avec un portefeuille fictif.
+Application web qui classe les actions du SBF 120 éligibles au PEA (indicateurs techniques,
+fondamentaux, actualité analysée par un modèle gratuit d'OpenRouter), teste la stratégie sur le
+passé et la suit dans un portefeuille fictif.
 
 > Outil d'aide à la décision personnel. Les estimations sont des statistiques sur le passé,
 > pas des promesses de gain, et ne constituent pas un conseil en investissement.
@@ -24,36 +24,45 @@ npm install
 npm run dev
 ```
 
+Sous Windows PowerShell : une commande par ligne (`&&` n'existe pas en 5.1), `Copy-Item` à la
+place de `cp`, et `npm.cmd` si la stratégie d'exécution bloque `npm`.
+
 Le premier compte créé depuis l'écran de connexion est le seul autorisé
 (`ALLOW_REGISTRATION=true` pour en ouvrir d'autres).
 Pour essayer sans réseau : `DATA_PROVIDER=synthetic` (cours fictifs).
 
+Le schéma de la base est créé et mis à jour automatiquement au démarrage (migrations Alembic).
+Le premier scan télécharge 15 ans de cours et prend quelques minutes ; les suivants relisent la base.
+
 Production : `npm run build` puis lancer uniquement le back-end, qui sert `frontend/dist`.
 Définir `ENVIRONMENT=prod`, `SECRET_KEY`, `COOKIE_SECURE=true` et placer le tout derrière HTTPS.
 
-Tests : `cd backend && uv run pytest && uv run ruff check .`
+Tests : `cd backend && uv run pytest && uv run ruff check .` (aussi lancés par GitHub Actions).
 
 ## Architecture
 
 ```
 frontend/  React + TypeScript (Vite, Recharts) — ne parle qu'à l'API REST /api
-backend/   FastAPI, SQLAlchemy (SQLite par défaut), environnement uv
-  app/api/        routes REST : auth, scans, stocks, portfolio
-  app/analysis/   indicators.py (indicateurs), scoring.py (score, risque, estimation)
-  app/market/     fournisseur de cours (yfinance ou synthétique) + cache
+backend/   FastAPI, SQLAlchemy, Alembic, environnement uv
+  app/api/        routes REST : auth, scans, stocks, portfolio, backtests, alerts
+  app/analysis/   indicators.py, scoring.py (score, risque, estimation), backtest.py
+  app/market/     provider.py (sources de cours, repli, stockage), fundamentals.py
   app/news/       flux RSS Google Actualités + analyse OpenRouter
-  app/services/   scanner.py (pipeline du scan), simulation.py (portefeuille fictif)
-  app/data/sbf120.csv   univers, modifiable (colonne pea = éligibilité)
+  app/services/   scanner, simulation, alerts (alertes + suivi auto), scheduler, backtester
+  app/data/       sbf120.csv (univers, secteurs, éligibilité), etfs.csv (ETF éligibles)
+  migrations/     migrations Alembic
 ```
 
 | Méthode | Route | Rôle |
 |---|---|---|
 | POST | `/api/auth/register`, `/login`, `/logout` | session par cookie httpOnly |
 | POST | `/api/scans` | lance un scan en tâche de fond |
-| GET | `/api/scans/latest` | progression + dernier résultat (top 20 et classement) |
+| GET | `/api/scans/latest` | progression + dernier résultat (top, classement, marché, ETF) |
 | GET | `/api/stocks/{ticker}` | séries cours / indicateurs pour les graphiques |
 | GET | `/api/opportunities/track` | pertinence des recommandations passées |
-| GET/POST | `/api/portfolio`, `/orders`, `/trades`, `/reset` | simulation |
+| GET/POST | `/api/portfolio`, `/orders`, `/trades`, `/reset`, `/settings` | simulation |
+| POST/GET | `/api/backtests`, `/api/backtests/latest` | backtest |
+| GET/POST | `/api/alerts`, `/api/alerts/read` | alertes |
 
 ## Méthode d'analyse
 
@@ -61,26 +70,75 @@ backend/   FastAPI, SQLAlchemy (SQLite par défaut), environnement uv
 stochastique lent 14/3/3, bandes de Bollinger (%B), ATR 14, ADX 14, performance 3 et 6 mois,
 ratio de volumes, volatilité annualisée 60 séances, repli maximal sur un an.
 
-**Score 0–100** = tendance 30 % + momentum 25 % + point d'entrée 25 % + volumes 10 % + stabilité 10 %.
-Il favorise les titres en tendance haussière pris sur un repli (stochastique bas qui se retourne,
-RSI non suracheté). Les pondérations sont dans `scoring.py` (`WEIGHTS`).
+**Score technique 0–100** = tendance 30 % + momentum 25 % + point d'entrée 25 % + volumes 10 % +
+stabilité 10 %. Il favorise les titres en tendance haussière pris sur un repli. Pondérations
+dans `scoring.py` (`WEIGHTS`).
 
-**Gain et durée de détention** : le score est recalculé pour chaque jour de l'historique (3 ans).
-On relève ce que le cours a fait 10, 20, 40, 60 et 90 séances après chaque jour où le score était
+**Fondamentaux** : pour les 40 meilleurs scores techniques, PER, croissance des bénéfices,
+dette / fonds propres et ROE donnent un score fondamental 0–100. Le score global vaut
+`technique + 0,2 × (fondamental − 50)`, soit ±10 points ; des données absentes ne changent rien.
+
+**Diversification** : le top 20 (`TOP_N`) est plafonné à 4 titres par secteur (`MAX_PER_SECTOR`).
+
+**Filtre de marché** : quand le CAC 40 est sous sa moyenne 200 séances, un bandeau le signale,
+le risque de chaque titre monte d'un cran et le suivi automatique n'achète plus.
+
+**Dates de résultats** : une publication dans les 10 jours est signalée sur la carte, et le
+suivi automatique n'achète pas le titre.
+
+**Gain et durée de détention** : le score est recalculé pour chaque jour de l'historique. On
+relève ce que le cours a fait 10, 20, 40, 60 et 90 séances après chaque jour où le score était
 comparable (≥ score actuel − 5), sur le titre lui-même s'il y a au moins 30 cas, sinon sur tout
-l'univers. Le gain affiché est la médiane, la fourchette va du 1ᵉʳ au 3ᵉ quartile, et l'horizon
-retenu est celui qui maximise médiane / √durée.
+l'univers. Gain affiché = médiane ; fourchette = 1ᵉʳ au 3ᵉ quartile ; horizon retenu = celui qui
+maximise médiane / √durée.
 
 **Risque 1–5** : volatilité annualisée (seuils 18 / 25 / 33 / 45 %), +1 si le repli sur un an
-dépasse 35 %, ±1 selon l'analyse de l'actualité. Stop suggéré : cours − 2 × ATR.
+dépasse 35 %, ±1 selon l'actualité, +1 en marché défavorable. Stop suggéré : cours − 2 × ATR.
 
-**Actualités** : pour le top 20 (`TOP_N`), les titres de presse des 21 derniers jours sont envoyés au modèle
-`openrouter/free` (modifiable via `OPENROUTER_MODEL`), qui renvoie sentiment, confiance, synthèse,
-catalyseurs et risques. Le score est ajusté de ±10 points au plus.
+**Actualités** : pour le top, les titres de presse des 21 derniers jours sont envoyés au modèle
+`openrouter/free` (`OPENROUTER_MODEL`), qui renvoie sentiment, confiance, synthèse, catalyseurs et
+risques. Le score est ajusté de ±10 points au plus.
 
-**Simulation** : capital fictif (10 000 € par défaut, plafonné à 150 000 € comme un PEA), ordres au
-dernier cours de clôture, frais de 0,5 %, pas de vente à découvert. L'onglet compare chaque
-recommandation passée au gain annoncé une fois la durée de détention écoulée.
+**ETF** : huit ETF éligibles PEA (`etfs.csv`) sont affichés pour comparaison et achetables en
+simulation ; ils ne sont pas notés.
+
+## Backtest
+
+`analysis/backtest.py` rejoue la stratégie sur 1 à 15 ans : à chaque revue, achat à l'ouverture
+suivante des titres les mieux notés (score minimal, plafond sectoriel, filtre de marché
+optionnel), à parts égales ; sortie au stop (N × ATR) ou à l'échéance ; frais sur chaque ordre.
+Le résultat est comparé à l'univers équipondéré et à l'ETF CAC 40 : rendement annualisé, perte
+maximale, volatilité, Sharpe, détail par année.
+
+Limites : biais du survivant (seules les sociétés aujourd'hui dans l'indice sont testées),
+fondamentaux et actualités non rejoués, exécution sans décalage de cours.
+
+## Simulation et automatisation
+
+- **Portefeuille fictif** : 10 000 € par défaut (plafond 150 000 € comme un PEA), ordres au
+  dernier cours de clôture, frais de 0,5 %, pas de vente à découvert. Un achat reprend le stop,
+  l'objectif et l'échéance de la dernière recommandation sur le titre.
+- **Suivi automatique** (à activer dans l'écran Simulation) : après chaque scan, vend les
+  positions arrivées au stop, à l'objectif ou à l'échéance, puis achète les meilleures
+  opportunités à parts égales (`AUTO_FOLLOW_POSITIONS`).
+- **Scan planifié** : `SCAN_SCHEDULE=18:30` lance un scan chaque jour ouvré (heure de Paris),
+  tant que le serveur tourne.
+- **Alertes** : nouvelles entrées dans le top, positions au stop / à l'objectif / à l'échéance,
+  opérations du suivi automatique. Visibles dans l'application, et envoyées par e-mail si
+  `SMTP_*` est renseigné.
+- **Fiscalité** : gain net si tout était retiré aujourd'hui — 31,4 % avant 5 ans (12,8 % d'impôt
+  sur le revenu + 18,6 % de prélèvements sociaux), 18,6 % après (taux 2026, modifiables dans `.env`).
+- **Pertinence** : chaque recommandation est comparée au gain annoncé une fois sa durée écoulée.
+
+## Données et base
+
+- Les cours sont conservés dans la table `prices` et rafraîchis toutes les 6 heures. Si la
+  source ne répond pas, les derniers cours en base sont utilisés.
+- Sources : `yfinance`, puis en secours l'API « chart » de Yahoo interrogée directement. Les
+  deux dépendent de Yahoo : le secours couvre une panne de la bibliothèque, pas de Yahoo.
+- PostgreSQL : `docker compose up -d`, `uv sync --extra postgres`, puis `DATABASE_URL` dans `.env`.
+- Nouvelle migration après modification de `models.py` :
+  `uv run alembic revision --autogenerate -m "description"`.
 
 ## Sécurité
 
@@ -92,15 +150,18 @@ recommandation passée au gain annoncé une fois la durée de détention écoul�
 - Limitation des tentatives de connexion par IP et par e-mail.
 - Toutes les entrées validées par Pydantic ; tickers restreints à l'univers ; requêtes SQL via l'ORM.
 - En-têtes : CSP, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, HSTS en HTTPS, `no-store` sur l'API.
-- Clés (OpenRouter, signature) uniquement côté serveur, dans `.env` non versionné, jamais journalisées.
+- Clés (OpenRouter, SMTP, signature) uniquement côté serveur, dans `.env` non versionné, jamais
+  journalisées ; e-mails envoyés uniquement après STARTTLS.
 - Titres de presse traités comme non fiables : XML analysé par `defusedxml`, consigne anti-injection,
   sortie du modèle validée par un schéma strict et bornée avant d'influencer le score.
 - OpenAPI/Swagger désactivés en production.
 
 ## Limites connues
 
-- Les cours viennent de Yahoo Finance via `yfinance` (non officiel, clôtures journalières).
-- La composition du SBF 120 et l'éligibilité PEA de `sbf120.csv` sont à vérifier et à tenir à jour.
+- Les cours et fondamentaux viennent de Yahoo Finance (non officiel) ; la couverture des
+  fondamentaux et des dates de résultats est inégale sur les valeurs françaises.
+- La composition du SBF 120, les secteurs, l'éligibilité PEA et la liste d'ETF (`app/data/`)
+  sont à vérifier et à tenir à jour.
 - L'estimation de gain est mesurée sur le même historique que celui qui sert au classement :
-  elle est optimiste par construction. L'onglet Simulation sert à la confronter à la réalité.
-- Limiteur de débit et cache en mémoire : prévus pour une seule instance.
+  elle est optimiste par construction. Le backtest et la simulation servent à la confronter à la réalité.
+- Limiteur de débit, cache mémoire et planificateur : prévus pour une seule instance.

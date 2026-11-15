@@ -12,9 +12,11 @@ os.environ.update(
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
-from app.db import Base, engine  # noqa: E402
+from app.db import Base, engine, init_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.market.provider import get_provider  # noqa: E402
 from app.security import rate_limiter  # noqa: E402
 
 XHR = {"X-Requested-With": "XMLHttpRequest"}
@@ -24,8 +26,11 @@ CREDS = {"email": "bastien@example.com", "password": "un-mot-de-passe-long"}
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
     Base.metadata.drop_all(engine)
-    Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+    init_db()  # le schéma de test est construit par les migrations, comme en production
     rate_limiter.reset()
+    get_provider().clear()
     monkeypatch.setattr("app.services.scanner.fetch_headlines", lambda *a, **k: [])
 
 

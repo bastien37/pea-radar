@@ -1,7 +1,8 @@
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -20,6 +21,30 @@ class OrderIn(BaseModel):
 
 class ResetIn(BaseModel):
     initial_cash: float = Field(ge=100, le=sim.PEA_CEILING)
+
+
+class SettingsIn(BaseModel):
+    auto_follow: bool | None = None
+    pea_opened_on: date | None = None
+
+    @field_validator("pea_opened_on")
+    @classmethod
+    def _not_future(cls, v: date | None) -> date | None:
+        if v is not None and not (date(1992, 9, 14) <= v <= date.today()):  # création du PEA
+            raise ValueError("Date d'ouverture du PEA invalide")
+        return v
+
+
+@router.post("/settings")
+def settings(body: SettingsIn, user: User = Depends(get_current_user),
+             db: Session = Depends(get_db)) -> dict:
+    pf = sim.get_portfolio(db, user)
+    if body.auto_follow is not None:
+        pf.auto_follow = body.auto_follow
+    if body.pea_opened_on is not None:
+        pf.pea_opened_on = body.pea_opened_on.isoformat()
+    db.commit()
+    return sim.portfolio_view(db, user)
 
 
 @router.get("")

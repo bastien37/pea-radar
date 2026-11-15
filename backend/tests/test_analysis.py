@@ -4,7 +4,13 @@ import pandas as pd
 from app.analysis import indicators as ta
 from app.analysis.scoring import estimate, forward_returns, risk_level, score_series
 from app.market.provider import SyntheticProvider
-from app.services.scanner import analyse_universe, apply_news, build_opportunity
+from app.services.scanner import (
+    analyse_universe,
+    apply_context,
+    build_opportunity,
+    market_regime,
+    select_top,
+)
 from app.universe import load_universe
 
 
@@ -74,6 +80,55 @@ def test_pipeline_and_news_adjustment():
     assert opp["stop_loss"] < opp["price"]
     base_risk = opp["risk_level"]
     news = {"status": "ok", "sentiment": -1.0, "confidence": 0.5, "risk_adjustment": 1}
-    out = apply_news(opp, news)
+    out = apply_context(opp, news, {"favorable": False})
     assert out["adjusted_score"] == round(out["score"] - 5, 1)
-    assert out["risk_level"] == min(base_risk + 1, 5)
+    assert out["risk_level"] == min(base_risk + 2, 5)  # actualité + marché défavorable
+    assert out["details"]["market_unfavorable"] is True
+
+
+def test_fundamental_score():
+    from app.market.fundamentals import fundamental_score
+    good = {"forward_pe": 9, "earnings_growth": 0.3, "debt_to_equity": 10, "roe": 0.25}
+    bad = {"pe": -4, "earnings_growth": -0.4, "debt_to_equity": 300, "roe": -0.1}
+    assert fundamental_score(good)[0] == 100 and fundamental_score(bad)[0] < 5
+    assert fundamental_score({"pe": 12})[0] is None  # un seul critère : pas de score
+    assert fundamental_score(None) == (None, {})
+
+
+def test_select_top_blends_and_caps_sectors():
+    ranking = [{"ticker": f"T{i}", "sector": "Banque" if i < 4 else f"S{i}", "score": 80 - i}
+               for i in range(8)]
+    funda = {"T7": {"forward_pe": 9, "earnings_growth": 0.3, "debt_to_equity": 10, "roe": 0.25},
+             "T0": {"pe": -4, "earnings_growth": -0.4, "debt_to_equity": 300, "roe": -0.1}}
+    picks = select_top(ranking, funda, top_n=5, max_per_sector=2, weight=0.2)
+    assert sum(p["sector"] == "Banque" for p in picks) == 2
+    assert picks[0]["ticker"] == "T7"  # 73 technique, tiré vers le haut par ses fondamentaux
+    assert next(p for p in ranking if p["ticker"] == "T0")["score"] == 80
+    assert "T0" not in [p["ticker"] for p in picks]  # 80 technique, plombé puis évincé du secteur
+
+
+def test_market_regime():
+    import pandas as pd
+    up = pd.DataFrame({"Close": [float(i) for i in range(1, 301)]})
+    up.index = pd.bdate_range("2024-01-01", periods=300)
+    assert market_regime(up)["favorable"] is True
+    assert market_regime(up.iloc[::-1].set_axis(up.index))["favorable"] is False
+    assert market_regime(up.iloc[:50]) is None
+
+
+def test_backtest_accounting():
+    from app.analysis.backtest import BacktestParams, metrics, run_backtest
+    p = SyntheticProvider()
+    u = dict(list(load_universe().items())[:30])
+    r = run_backtest(p.history(list(u)), {t: s.sector for t, s in u.items()},
+                     p.history(["^FCHI"])["^FCHI"], None, BacktestParams(years=6, market_filter=False))
+    assert r["trades"]["count"] > 20 and 0 <= r["trades"]["exposure_pct"] <= 100
+    assert set(r["metrics"]) == {"Stratégie", "Univers équipondéré", "CAC 40 (hors dividendes)"}
+    assert all(row["Stratégie"] > 0 for row in r["curve"])
+    # sans frais ni stop serré, aucune perte ne peut dépasser l'amplitude des cours
+    free = run_backtest(p.history(list(u)), {t: s.sector for t, s in u.items()}, None, None,
+                        BacktestParams(years=6, market_filter=False, fee_rate=0.0))
+    assert free["metrics"]["Stratégie"]["total_return_pct"] > r["metrics"]["Stratégie"]["total_return_pct"]
+    import pandas as pd
+    flat = pd.Series([100.0, 110.0, 99.0, 121.0])
+    assert metrics(flat)["max_drawdown_pct"] == 10.0 and metrics(flat)["total_return_pct"] == 21.0

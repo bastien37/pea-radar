@@ -1,0 +1,18 @@
+# Facultatif : PostgreSQL à la place de SQLite.
+#   docker compose up -d
+#   cd backend && uv sync --extra postgres
+#   DATABASE_URL=postgresql+psycopg://pea:change-moi@localhost:5432/pea_radar dans .env
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: pea
+      POSTGRES_PASSWORD: change-moi
+      POSTGRES_DB: pea_radar
+    ports:
+      - "127.0.0.1:5432:5432"  # accessible uniquement depuis la machine
+    volumes:
+      - pea_radar_db:/var/lib/postgresql/data
+
+volumes:
+  pea_radar_db:

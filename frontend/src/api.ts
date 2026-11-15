@@ -53,16 +53,22 @@ export interface Opportunity {
   id: number; rank: number; ticker: string; name: string; price: number; price_date: string;
   score: number; adjusted_score: number; risk_level: number; risk_label: string;
   expected_gain_pct: number; gain_low_pct: number; gain_high_pct: number; win_rate: number;
-  holding_days: number; stop_loss: number; news: News;
+  holding_days: number; stop_loss: number; news: News; sector: string | null;
   details: {
     indicators: Record<string, number | null>;
     subscores: Record<string, number>;
     estimate: { basis: string; samples: number; by_horizon: HorizonStat[] };
+    global_score: number;
+    fundamentals: Partial<Record<"pe" | "forward_pe" | "earnings_growth" | "debt_to_equity" | "roe" | "dividend_yield_pct", number | null>> & { next_earnings?: string | null };
+    fundamental_score: number | null;
+    earnings_in_days: number | null;
+    earnings_warning: boolean;
+    market_unfavorable: boolean;
   };
 }
 
 export interface RankRow {
-  rank: number; ticker: string; name: string; price: number; score: number; risk_level: number;
+  rank: number; ticker: string; name: string; sector: string; price: number; score: number; risk_level: number;
   rsi: number; stoch_k: number; perf_3m_pct: number; volatility_pct: number;
 }
 
@@ -71,18 +77,41 @@ export interface ScanInfo {
   error: string | null; started_at: string; finished_at: string | null;
 }
 
-export interface ScanResult extends ScanInfo { opportunities: Opportunity[]; ranking: RankRow[] }
+export interface Regime {
+  index: string; close: number; sma200: number; favorable: boolean; distance_pct: number; date: string;
+}
+
+export interface EtfRow {
+  ticker: string; name: string; index: string; price: number; perf_3m_pct: number;
+  perf_1y_pct: number | null; volatility_pct: number;
+}
+
+export interface ScanResult extends ScanInfo {
+  opportunities: Opportunity[]; ranking: RankRow[];
+  market: { regime: Regime | null; etfs: EtfRow[] };
+}
+
+export interface Alert { id: number; kind: string; ticker: string; message: string; read: boolean; created_at: string }
 
 export interface Latest { current: ScanInfo | null; result: ScanResult | null }
 
 export interface Position {
   ticker: string; name: string; quantity: number; avg_cost: number; price: number;
   value: number; pnl: number; pnl_pct: number;
+  opened_on: string | null; holding_days: number | null; elapsed_days: number | null;
+  stop_loss: number | null; target_price: number | null; trigger: string | null;
+}
+
+export interface Tax {
+  pea_opened_on: string; years: number; after_5_years: boolean; rate_pct: number;
+  social_rate_pct: number; income_tax_rate_pct: number;
+  gross_gain: number; tax: number; net_gain: number; net_value: number;
 }
 
 export interface Portfolio {
   initial_cash: number; cash: number; invested: number; total_value: number;
   performance_pct: number; realized_pnl: number; fees_paid: number; fee_rate: number;
+  auto_follow: boolean; auto_follow_positions: number; tax: Tax;
   positions: Position[];
 }
 
@@ -117,3 +146,31 @@ export const weeks = (tradingDays: number) => {
   const w = Math.round(tradingDays / 5);
   return w >= 9 ? `≈ ${Math.round(w / 4.35)} mois` : `≈ ${w} semaines`;
 };
+
+export interface Metrics {
+  total_return_pct: number; cagr_pct: number; max_drawdown_pct: number; volatility_pct: number; sharpe: number;
+}
+
+export interface BtTrade { ticker: string; entry: string; exit: string; days: number; reason: string; pnl_pct: number }
+
+export interface BacktestParams {
+  years: number; positions: number; holding_days: number; stop_atr: number; min_score: number;
+  rebalance_days: number; max_per_sector: number; market_filter: boolean;
+}
+
+export interface BacktestResult {
+  period: { start: string; end: string; tickers: number };
+  metrics: Record<string, Metrics>;
+  trades: {
+    count: number; exposure_pct: number; win_rate: number | null; avg_pnl_pct: number | null;
+    avg_days: number | null; stopped_pct: number | null; best: BtTrade[]; worst: BtTrade[];
+  };
+  yearly: ({ year: number } & Record<string, number>)[];
+  curve: ({ date: string } & Record<string, number | string>)[];
+  notes: string[];
+}
+
+export interface Backtest {
+  id: number; status: "pending" | "running" | "done" | "failed"; error: string | null;
+  params: BacktestParams; result: BacktestResult | null; finished_at: string | null;
+}

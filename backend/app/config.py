@@ -1,6 +1,7 @@
 """Configuration centralisée, lue depuis l'environnement / le fichier .env."""
 
 import logging
+import re
 import secrets
 from functools import lru_cache
 from typing import Literal
@@ -28,12 +29,29 @@ class Settings(BaseSettings):
 
     # --- Données de marché ---
     data_provider: Literal["yfinance", "synthetic"] = "yfinance"
-    history_period: str = "3y"
-    price_cache_seconds: int = 3600
+    history_period: str = "15y"
+    price_cache_seconds: int = 6 * 3600
+    fundamentals_cache_days: int = 7
 
     # --- Analyse ---
     top_n: int = Field(default=20, ge=1, le=50)
     news_pause_seconds: float = 3.0  # entre deux appels IA : ménage les quotas gratuits
+    max_per_sector: int = Field(default=4, ge=1)  # diversification du top
+    fundamental_weight: float = Field(default=0.2, ge=0, le=0.5)  # 0,2 → ±10 points
+    earnings_warning_days: int = 10
+
+    # --- Automatisation ---
+    scan_schedule: str = ""  # « HH:MM » heure de Paris, jours ouvrés ; vide = désactivé
+    auto_follow_positions: int = Field(default=5, ge=1, le=20)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: SecretStr | None = None
+    smtp_from: str = ""
+
+    # --- Fiscalité du PEA (taux 2026) ---
+    pea_social_rate: float = 0.186  # prélèvements sociaux, dus à tout retrait
+    pea_income_tax_rate: float = 0.128  # impôt sur le revenu, retrait avant 5 ans
     news_max_headlines: int = 12
 
     # --- OpenRouter ---
@@ -46,10 +64,17 @@ class Settings(BaseSettings):
     default_initial_cash: float = 10_000.0
     order_fee_rate: float = 0.005  # 0,5 % par ordre
 
-    @field_validator("secret_key", "openrouter_api_key", mode="before")
+    @field_validator("secret_key", "openrouter_api_key", "smtp_password", mode="before")
     @classmethod
     def _empty_is_none(cls, v):
         return v or None  # « CLE= » dans le .env équivaut à une clé absente
+
+    @field_validator("scan_schedule")
+    @classmethod
+    def _check_schedule(cls, v: str) -> str:
+        if v and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", v):
+            raise ValueError("SCAN_SCHEDULE attend le format HH:MM")
+        return v
 
     @field_validator("secret_key")
     @classmethod

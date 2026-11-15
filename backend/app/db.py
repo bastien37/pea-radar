@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from pathlib import Path
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -33,6 +34,16 @@ def get_db() -> Iterator[Session]:
 
 
 def init_db() -> None:
-    from app import models  # noqa: F401
+    """Amène le schéma à la dernière version via les migrations Alembic."""
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
 
-    Base.metadata.create_all(engine)
+    backend = Path(__file__).resolve().parents[1]
+    cfg = Config(str(backend / "alembic.ini"))
+    cfg.set_main_option("script_location", str(backend / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", _url.replace("%", "%%"))
+    tables = set(inspect(engine).get_table_names())
+    if "users" in tables and "alembic_version" not in tables:
+        command.stamp(cfg, "0001")  # base créée avant l'arrivée d'Alembic
+    command.upgrade(cfg, "head")
