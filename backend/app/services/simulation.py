@@ -141,6 +141,7 @@ def portfolio_view(db: Session, user: User) -> dict:
         invested += value
         positions.append({
             "ticker": p.ticker, "name": tradable[p.ticker].name if p.ticker in tradable else p.ticker,
+            "is_etf": p.ticker in tradable and tradable[p.ticker].is_etf,
             "quantity": p.quantity, "avg_cost": round(p.avg_cost, 4), "price": round(price, 4),
             "value": round(value, 2),
             "pnl": round(value - p.avg_cost * p.quantity, 2),

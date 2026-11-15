@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import alerts, auth, backtests, portfolio, scans, stocks
+from app.api import alerts, auth, backtests, etfs, portfolio, scans, stocks
 from app.config import get_settings
 from app.db import init_db
 from app.security import require_csrf_header
@@ -61,7 +61,7 @@ def create_app() -> FastAPI:
         return response
 
     api = APIRouter(prefix="/api", dependencies=[Depends(require_csrf_header)])
-    for module in (auth, scans, stocks, portfolio, backtests, alerts):
+    for module in (auth, scans, stocks, portfolio, backtests, alerts, etfs):
         api.include_router(module.router)
 
     @api.get("/health", tags=["system"])

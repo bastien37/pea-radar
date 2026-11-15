@@ -36,7 +36,7 @@ export default function Stock() {
 
   return (
     <>
-      <p><Link to="/">← Opportunités</Link></p>
+      <p><Link to="/">← Actions</Link> · <Link to="/etf">ETF</Link></p>
       <h1>{data.name} <span className="muted small">{ticker}</span></h1>
       <Panel title="Cours et moyennes mobiles (20, 50, 200 séances)">
         <LineChart data={s}>

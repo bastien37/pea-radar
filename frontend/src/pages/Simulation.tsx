@@ -132,13 +132,17 @@ export default function Simulation() {
         <button type="button" className="ghost" onClick={() => order("sell")}>Vendre</button>
       </form>
 
-      <h2>Positions</h2>
-      <div className="card scroll">
-        {pf.positions.length === 0 ? <p className="muted">Aucune position.</p> : (
-          <table>
-            <thead><tr><th>Titre</th><th>Qté</th><th>Prix de revient</th><th>Cours</th><th>Valeur</th><th>+/− latente</th><th>Stop</th><th>Objectif</th><th>Avancement</th><th /></tr></thead>
-            <tbody>
-              {pf.positions.map((p) => (
+      {([["Actions", false], ["ETF", true]] as const).map(([title, etf]) => {
+        const rows = pf.positions.filter((p) => p.is_etf === etf);
+        return (
+          <div key={title}>
+            <h2>Positions — {title}</h2>
+            <div className="card scroll">
+              {rows.length === 0 ? <p className="muted">Aucune position.</p> : (
+                <table>
+                  <thead><tr><th>Titre</th><th>Qté</th><th>Prix de revient</th><th>Cours</th><th>Valeur</th><th>+/− latente</th><th>Stop</th><th>Objectif</th><th>Avancement</th><th /></tr></thead>
+                  <tbody>
+                    {rows.map((p) => (
                 <tr key={p.ticker}>
                   <td><Link to={`/titre/${p.ticker}`}>{p.name}</Link></td>
                   <td>{p.quantity}</td><td>{eur(p.avg_cost)}</td><td>{eur(p.price)}</td><td>{eur(p.value)}</td>
@@ -151,11 +155,14 @@ export default function Simulation() {
                   </td>
                   <td><button className="ghost" onClick={() => order("sell", p.ticker, p.quantity)}>Tout vendre</button></td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        );
+      })}
 
       <h2>Pertinence des recommandations</h2>
       <p className="muted small">

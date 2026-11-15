@@ -214,9 +214,9 @@ export default function Dashboard() {
     <>
       <section className="toolbar">
         <div>
-          <h1>Opportunités PEA</h1>
+          <h1>Actions</h1>
           <p className="muted">
-            SBF 120 éligible PEA
+            SBF 120 éligible PEA · les ETF ont <Link to="/etf">leur propre écran</Link>
             {result?.finished_at && ` · dernier scan le ${new Date(result.finished_at).toLocaleString("fr-FR")}`}
           </p>
         </div>
@@ -250,27 +250,6 @@ export default function Dashboard() {
       {result && (
         <>
           <div className="grid">{result.opportunities.map((o) => <OpportunityCard key={o.id} o={o} />)}</div>
-          {result.market?.etfs?.length > 0 && (
-            <>
-              <h2>ETF éligibles PEA, pour comparaison</h2>
-              <div className="card scroll">
-                <table>
-                  <thead><tr><th>ETF</th><th>Indice</th><th>Cours</th><th>Perf. 3 mois</th><th>Perf. 1 an</th><th>Volatilité</th></tr></thead>
-                  <tbody>
-                    {result.market.etfs.map((e) => (
-                      <tr key={e.ticker}>
-                        <td><Link to={`/titre/${e.ticker}`}>{e.name}</Link> <span className="muted small">{e.ticker}</span></td>
-                        <td>{e.index}</td><td>{eur(e.price)}</td>
-                        <td className={e.perf_3m_pct >= 0 ? "pos" : "neg"}>{pct(e.perf_3m_pct)}</td>
-                        <td className={(e.perf_1y_pct ?? 0) >= 0 ? "pos" : "neg"}>{e.perf_1y_pct === null ? "—" : pct(e.perf_1y_pct)}</td>
-                        <td>{e.volatility_pct} %</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
           <h2>Classement technique complet</h2>
           <div className="card scroll">
             <table>

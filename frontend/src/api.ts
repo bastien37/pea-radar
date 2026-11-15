@@ -96,7 +96,7 @@ export interface Alert { id: number; kind: string; ticker: string; message: stri
 export interface Latest { current: ScanInfo | null; result: ScanResult | null }
 
 export interface Position {
-  ticker: string; name: string; quantity: number; avg_cost: number; price: number;
+  ticker: string; name: string; is_etf: boolean; quantity: number; avg_cost: number; price: number;
   value: number; pnl: number; pnl_pct: number;
   opened_on: string | null; holding_days: number | null; elapsed_days: number | null;
   stop_loss: number | null; target_price: number | null; trigger: string | null;
@@ -193,4 +193,20 @@ export interface WalkForwardResult {
 export interface WalkForward {
   id: number; status: "pending" | "running" | "done" | "failed"; error: string | null;
   result: WalkForwardResult | null; finished_at: string | null;
+}
+
+export interface EtfStat {
+  ticker: string; name: string; index: string; available: boolean; price?: number; since?: string;
+  history_years?: number; perf_1y_pct?: number | null; perf_3y_pct?: number | null;
+  perf_5y_pct?: number | null; perf_10y_pct?: number | null; perf_all_pct?: number | null;
+  volatility_pct?: number; max_drawdown_pct?: number;
+}
+
+export interface Plan {
+  ticker: string; name: string; months: number; requested_months: number; start: string; end: string;
+  invested: number; final_value: number; gain: number; gain_pct: number; annual_return_pct: number | null;
+  fees: number; fee_rate: number; tax_rate_pct: number; tax: number; net_gain: number; net_value: number;
+  after_5_years: boolean; worst_point: { date: string; gap_pct: number };
+  windows: { count: number; worst_pct: number; median_pct: number; best_pct: number; loss_share: number } | null;
+  curve: { date: string; invested: number; value: number }[];
 }

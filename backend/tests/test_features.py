@@ -267,3 +267,50 @@ def test_walkforward_api_is_separate_from_backtests(auth_client):
     assert names[-2:] == ["Univers équipondéré", "ETF CAC 40"] and "Score PEA Radar" in names
     assert wf["result"]["params"]["fee_rate"] == 0.005
     assert auth_client.get("/api/backtests/latest").json() is None  # pas mélangé aux backtests
+
+
+def _monthly_series(prices):
+    idx = pd.to_datetime([f"{2015 + i // 12}-{i % 12 + 1:02d}-01" for i in range(len(prices))])
+    return pd.Series([float(p) for p in prices], index=idx)
+
+
+def test_plan_on_flat_price_only_loses_fees():
+    from app.services.etf import simulate_plan
+    r = simulate_plan(_monthly_series([100] * 61), monthly=100, initial=0, years=5, fee_rate=0.01)
+    assert r["months"] == 60 and r["invested"] == 6000 and r["fees"] == 60
+    assert r["final_value"] == 5940 and r["gain"] == -60 and r["tax"] == 0 and r["net_gain"] == -60
+    assert r["annual_return_pct"] < 0 and len(r["curve"]) == 61
+
+
+def test_plan_gain_tax_and_money_weighted_return():
+    from app.services.etf import simulate_plan
+    prices = [100 * 1.01 ** i for i in range(73)]  # +1 % par mois, soit 12,68 % par an
+    r = simulate_plan(_monthly_series(prices), monthly=200, initial=1000, years=6, fee_rate=0.0)
+    assert r["invested"] == 1000 + 200 * 72 and r["after_5_years"] is True and r["tax_rate_pct"] == 18.6
+    assert abs(r["annual_return_pct"] - 12.68) < 0.1  # retrouve le rendement de l'actif
+    assert abs(r["tax"] - r["gain"] * 0.186) < 0.01 and abs(r["net_value"] - (r["final_value"] - r["tax"])) < 0.01
+    short = simulate_plan(_monthly_series(prices), monthly=200, initial=0, years=2, fee_rate=0.0)
+    assert short["tax_rate_pct"] == 31.4 and short["windows"]["count"] == 73 - 24
+    assert short["windows"]["loss_share"] == 0 and short["windows"]["worst_pct"] > 0
+
+
+def test_plan_reports_worst_point_and_shortened_history():
+    from app.services.etf import simulate_plan
+    prices = [100] * 12 + [50] * 6 + [100] * 19  # krach de 50 % puis retour
+    r = simulate_plan(_monthly_series(prices), monthly=100, initial=0, years=10, fee_rate=0.0)
+    assert r["months"] == 36 and r["requested_months"] == 120  # historique plus court que demandé
+    assert r["worst_point"]["gap_pct"] < -40 and r["gain"] > 0  # acheter pendant la baisse a payé
+
+
+def test_etf_api(auth_client):
+    rows = auth_client.get("/api/etfs").json()
+    assert len(rows) == 8 and all(r["available"] for r in rows)
+    assert rows[0]["perf_5y_pct"] is not None and rows[0]["perf_10y_pct"] is None and rows[0]["max_drawdown_pct"] > 0
+    plan = {"ticker": "CW8.PA", "monthly": 200, "initial": 1000, "years": 8}
+    r = auth_client.post("/api/etfs/simulate", json=plan).json()
+    assert r["invested"] == 1000 + 200 * 96 and r["windows"]["count"] > 12 and r["name"]
+    assert auth_client.post("/api/etfs/simulate", json={**plan, "ticker": "AIR.PA"}).status_code == 404
+    too_much = {**plan, "monthly": 5000, "years": 10}
+    assert auth_client.post("/api/etfs/simulate", json=too_much).status_code == 422  # plafond du PEA
+    auth_client.post("/api/portfolio/orders", json={"ticker": "CW8.PA", "side": "buy", "quantity": 1})
+    assert auth_client.get("/api/portfolio").json()["positions"][0]["is_etf"] is True

@@ -62,6 +62,8 @@ backend/   FastAPI, SQLAlchemy, Alembic, environnement uv
 | GET | `/api/opportunities/track` | pertinence des recommandations passées |
 | GET/POST | `/api/portfolio`, `/orders`, `/trades`, `/reset`, `/settings` | simulation |
 | POST/GET | `/api/backtests`, `/api/backtests/latest` | backtest |
+| POST/GET | `/api/backtests/walkforward`, `/walkforward/latest` | validation walk-forward |
+| GET/POST | `/api/etfs`, `/api/etfs/simulate` | statistiques des ETF, versements programmés |
 | GET/POST | `/api/alerts`, `/api/alerts/read` | alertes |
 
 ## Méthode d'analyse
@@ -99,8 +101,20 @@ dépasse 35 %, ±1 selon l'actualité, +1 en marché défavorable. Stop suggér�
 `openrouter/free` (`OPENROUTER_MODEL`), qui renvoie sentiment, confiance, synthèse, catalyseurs et
 risques. Le score est ajusté de ±10 points au plus.
 
-**ETF** : huit ETF éligibles PEA (`etfs.csv`) sont affichés pour comparaison et achetables en
-simulation ; ils ne sont pas notés.
+**ETF** : huit ETF éligibles PEA (`etfs.csv`) ont leur propre écran, séparé des actions ; ils
+ne sont pas notés par le scan (voir « Écran ETF »).
+
+## Écran ETF
+
+- **Tableau comparatif** : rendement annualisé sur 1, 3, 5 et 10 ans, volatilité, perte maximale
+  et date de début d'historique de chaque ETF.
+- **Versements programmés** (`services/etf.py`) : rejoue sur l'historique réel un plan
+  d'investissement mensuel (premier jour de bourse du mois), avec versement initial facultatif
+  et frais par ordre. Résultat : total versé, valeur finale, rendement annuel pondéré par les
+  dates de versement, net d'impôt selon l'âge du plan, pire moment par rapport aux sommes versées.
+- **Autres dates de départ** : le même plan est rejoué en le démarrant chaque mois de
+  l'historique ; pire, médian, meilleur résultat et part des plans terminés en perte.
+- Dans la simulation, les positions en actions et en ETF sont listées séparément.
 
 ## Backtest
 
