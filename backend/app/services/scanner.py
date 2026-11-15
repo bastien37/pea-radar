@@ -1,6 +1,7 @@
 """Scan de l'univers : indicateurs → score → top N → actualités analysées par IA."""
 
 import logging
+import time
 from dataclasses import asdict
 
 import numpy as np
@@ -122,7 +123,10 @@ def run_scan(scan_id: int) -> None:
             _set(scan_id, progress=f"Analyse des actualités ({i}/{s.top_n}) : {row['name']}")
             opp = build_opportunity(row, ctx[row["ticker"]], pooled)
             headlines = fetch_headlines(row["name"], s.news_max_headlines)
-            opps.append(apply_news(opp, analyse_news(row["name"], row["ticker"], headlines)))
+            news = analyse_news(row["name"], row["ticker"], headlines)
+            opps.append(apply_news(opp, news))
+            if news["status"] in ("ok", "error"):  # un appel IA a réellement eu lieu
+                time.sleep(s.news_pause_seconds)
         opps.sort(key=lambda o: o["adjusted_score"], reverse=True)
 
         with SessionLocal() as db:

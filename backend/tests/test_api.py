@@ -64,13 +64,13 @@ def test_scan_end_to_end(auth_client):
     data = auth_client.get("/api/scans/latest").json()
     assert data["current"]["status"] == "done", data["current"]
     result = data["result"]
-    assert len(result["opportunities"]) == 5 and len(result["ranking"]) > 100
+    assert len(result["opportunities"]) == 20 and len(result["ranking"]) > 100
     top = result["opportunities"][0]
     assert 1 <= top["risk_level"] <= 5 and top["holding_days"] > 0
     assert top["news"]["status"] == "no_news"
     assert top["details"]["estimate"]["basis"] in ("titre", "univers")
     track = auth_client.get("/api/opportunities/track").json()
-    assert track["summary"]["total"] == 5 and track["items"][0]["verdict"] == "en cours"
+    assert track["summary"]["total"] == 20 and track["items"][0]["verdict"] == "en cours"
 
 
 def test_stock_detail_validation(auth_client):

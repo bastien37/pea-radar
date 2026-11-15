@@ -1,7 +1,7 @@
 # PEA Radar
 
 Application web qui classe les actions du SBF 120 éligibles au PEA selon des indicateurs
-techniques, fait analyser l'actualité des 5 meilleures par un modèle gratuit d'OpenRouter,
+techniques, fait analyser l'actualité des 20 meilleures par un modèle gratuit d'OpenRouter,
 et permet de tester les recommandations avec un portefeuille fictif.
 
 > Outil d'aide à la décision personnel. Les estimations sont des statistiques sur le passé,
@@ -50,7 +50,7 @@ backend/   FastAPI, SQLAlchemy (SQLite par défaut), environnement uv
 |---|---|---|
 | POST | `/api/auth/register`, `/login`, `/logout` | session par cookie httpOnly |
 | POST | `/api/scans` | lance un scan en tâche de fond |
-| GET | `/api/scans/latest` | progression + dernier résultat (top 5 et classement) |
+| GET | `/api/scans/latest` | progression + dernier résultat (top 20 et classement) |
 | GET | `/api/stocks/{ticker}` | séries cours / indicateurs pour les graphiques |
 | GET | `/api/opportunities/track` | pertinence des recommandations passées |
 | GET/POST | `/api/portfolio`, `/orders`, `/trades`, `/reset` | simulation |
@@ -74,7 +74,7 @@ retenu est celui qui maximise médiane / √durée.
 **Risque 1–5** : volatilité annualisée (seuils 18 / 25 / 33 / 45 %), +1 si le repli sur un an
 dépasse 35 %, ±1 selon l'analyse de l'actualité. Stop suggéré : cours − 2 × ATR.
 
-**Actualités** : pour le top 5, les titres de presse des 21 derniers jours sont envoyés au modèle
+**Actualités** : pour le top 20 (`TOP_N`), les titres de presse des 21 derniers jours sont envoyés au modèle
 `openrouter/free` (modifiable via `OPENROUTER_MODEL`), qui renvoie sentiment, confiance, synthèse,
 catalyseurs et risques. Le score est ajusté de ±10 points au plus.
 

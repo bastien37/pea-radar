@@ -5,7 +5,7 @@ import secrets
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 log = logging.getLogger(__name__)
@@ -32,7 +32,8 @@ class Settings(BaseSettings):
     price_cache_seconds: int = 3600
 
     # --- Analyse ---
-    top_n: int = 5
+    top_n: int = Field(default=20, ge=1, le=50)
+    news_pause_seconds: float = 3.0  # entre deux appels IA : ménage les quotas gratuits
     news_max_headlines: int = 12
 
     # --- OpenRouter ---
