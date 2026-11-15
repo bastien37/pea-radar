@@ -45,7 +45,9 @@ def test_legacy_database_is_stamped_then_upgraded(tmp_path, monkeypatch):
     with legacy.connect() as conn:
         assert conn.execute(text("SELECT email FROM users")).scalar() == "a@b.fr"
         assert "auto_follow" in {c["name"] for c in inspect(conn).get_columns("portfolios")}
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0002"
+        from alembic.script import ScriptDirectory
+        head = ScriptDirectory.from_config(cfg).get_current_head()
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == head
 
 
 class _Flaky:
@@ -210,3 +212,58 @@ def test_backtest_api(auth_client):
     assert "ETF CAC 40 (dividendes réinvestis)" in res["metrics"] and res["trades"]["count"] > 0
     assert len(res["curve"]) > 100 and len(res["yearly"]) >= 5
     assert get_provider().last_price("AIR.PA") is not None
+
+
+def _walk_inputs(days=2400, n=30):
+    import numpy as np
+    idx = pd.bdate_range(end="2026-11-13", periods=days)
+    rng = np.random.default_rng(7)
+    hist = {}
+    for i in range(n):  # les 10 premiers titres ont une dérive persistante : le momentum doit les trouver
+        drift = 0.0012 if i < 10 else -0.0002
+        close = 100 * np.exp(np.cumsum(rng.normal(drift, 0.012, days)))
+        hist[f"T{i}.PA"] = pd.DataFrame({"Open": close, "High": close * 1.005, "Low": close * 0.995,
+                                         "Close": close, "Volume": 1e6}, index=idx)
+    return hist
+
+
+def test_simulate_matches_equal_weight_universe_without_fees():
+    import numpy as np
+
+    from app.analysis.walkforward import build_signals, simulate
+    close, signals = build_signals(_walk_inputs(days=800, n=8), with_score=False)
+    flat = signals["momentum"].notna().astype(float).where(signals["momentum"].notna())
+    net, turnover = simulate(flat, close, top_n=8, rebalance=1, fee_rate=0.0)
+    start = flat.first_valid_index()
+    expected = close.pct_change(fill_method=None).mean(axis=1)
+    assert np.allclose(net[net.index > start], expected[expected.index > start])
+    costly, _ = simulate(flat, close, top_n=8, rebalance=1, fee_rate=0.01)
+    assert (costly <= net + 1e-12).all() and costly.sum() < net.sum()  # les frais ne font que coûter
+    assert turnover.loc[start] == 1.0  # premier investissement : tout le portefeuille
+
+
+def test_walkforward_finds_planted_momentum_and_stays_out_of_sample():
+    from app.analysis.walkforward import AUTO, WalkForwardParams, run_walkforward
+    hist = _walk_inputs()
+    r = run_walkforward(hist, None, "ETF CAC 40", WalkForwardParams(years=9, fee_rate=0.002))
+    rows = {s["name"]: s for s in r["strategies"]}
+    assert r["reference"] == "Univers équipondéré" and rows["Univers équipondéré"]["reference"]
+    assert rows["Momentum 12 mois"]["beats_reference"] is True and "Momentum 12 mois" in r["winners"]
+    assert rows["Momentum 12 mois"]["cagr_pct"] > rows["Univers équipondéré"]["cagr_pct"] + 5
+    assert rows[AUTO]["years"] == r["period"]["test_years"] == len(r["yearly"]) == len(r["choices"])
+    # hors échantillon : la première année de test vient après la fenêtre d'apprentissage
+    first_valid = pd.Timestamp("2026-11-13") - pd.DateOffset(years=9)
+    assert pd.Timestamp(r["period"]["start"]).year >= first_valid.year + 3
+    assert set(r["choices"][0]) == {"year", *rows} - {"Univers équipondéré"}
+
+
+def test_walkforward_api_is_separate_from_backtests(auth_client):
+    assert auth_client.get("/api/backtests/walkforward/latest").json() is None
+    assert auth_client.post("/api/backtests/walkforward", json={"years": 3}).status_code == 422
+    assert auth_client.post("/api/backtests/walkforward", json={"years": 9}).status_code == 202
+    wf = auth_client.get("/api/backtests/walkforward/latest").json()
+    assert wf["status"] == "done", wf["error"]
+    names = [s["name"] for s in wf["result"]["strategies"]]
+    assert names[-2:] == ["Univers équipondéré", "ETF CAC 40"] and "Score PEA Radar" in names
+    assert wf["result"]["params"]["fee_rate"] == 0.005
+    assert auth_client.get("/api/backtests/latest").json() is None  # pas mélangé aux backtests

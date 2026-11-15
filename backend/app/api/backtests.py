@@ -25,29 +25,55 @@ class BacktestIn(BaseModel):
     market_filter: bool = True
 
 
+class WalkForwardIn(BaseModel):
+    years: int = Field(15, ge=6, le=15)
+    train_years: int = Field(3, ge=1, le=5)
+
+
 def _out(bt: Backtest) -> dict:
     return {"id": bt.id, "status": bt.status, "error": bt.error, "params": bt.params,
             "started_at": bt.started_at, "finished_at": bt.finished_at, "result": bt.result}
 
 
-@router.post("", status_code=status.HTTP_202_ACCEPTED)
-def start(body: BacktestIn, tasks: BackgroundTasks, user: User = Depends(get_current_user),
-          db: Session = Depends(get_db)) -> dict:
+def _launch(kind: str, params: dict, tasks: BackgroundTasks, user: User, db: Session) -> dict:
     for bt in db.scalars(select(Backtest).where(Backtest.user_id == user.id,
                                                 Backtest.status.in_(("pending", "running")))):
         started = bt.started_at if bt.started_at.tzinfo else bt.started_at.replace(tzinfo=utcnow().tzinfo)
         if utcnow() - started < timedelta(minutes=20):
-            raise HTTPException(status.HTTP_409_CONFLICT, "Un backtest est déjà en cours")
+            raise HTTPException(status.HTTP_409_CONFLICT, "Un calcul est déjà en cours")
         bt.status, bt.error = "failed", "Backtest interrompu"
-    bt = Backtest(user_id=user.id, params={**body.model_dump(),
-                                           "fee_rate": get_settings().order_fee_rate})
+    bt = Backtest(user_id=user.id, kind=kind,
+                  params={**params, "fee_rate": get_settings().order_fee_rate})
     db.add(bt)
     db.commit()
     tasks.add_task(run_backtest_job, bt.id)
     return _out(bt)
 
 
+def _latest(kind: str, user: User, db: Session) -> dict | None:
+    bt = db.scalar(select(Backtest).where(Backtest.user_id == user.id, Backtest.kind == kind)
+                   .order_by(Backtest.id.desc()))
+    return _out(bt) if bt else None
+
+
+@router.post("", status_code=status.HTTP_202_ACCEPTED)
+def start(body: BacktestIn, tasks: BackgroundTasks, user: User = Depends(get_current_user),
+          db: Session = Depends(get_db)) -> dict:
+    return _launch("backtest", body.model_dump(), tasks, user, db)
+
+
 @router.get("/latest")
 def latest(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict | None:
-    bt = db.scalar(select(Backtest).where(Backtest.user_id == user.id).order_by(Backtest.id.desc()))
-    return _out(bt) if bt else None
+    return _latest("backtest", user, db)
+
+
+@router.post("/walkforward", status_code=status.HTTP_202_ACCEPTED)
+def start_walkforward(body: WalkForwardIn, tasks: BackgroundTasks,
+                      user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    return _launch("walkforward", body.model_dump(), tasks, user, db)
+
+
+@router.get("/walkforward/latest")
+def latest_walkforward(user: User = Depends(get_current_user),
+                       db: Session = Depends(get_db)) -> dict | None:
+    return _latest("walkforward", user, db)

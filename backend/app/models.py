@@ -126,6 +126,7 @@ class Backtest(Base):
     __tablename__ = "backtests"
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="backtest", server_default="backtest")
     status: Mapped[str] = mapped_column(String(16), default="pending")
     params: Mapped[dict] = mapped_column(JSON, default=dict)
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)

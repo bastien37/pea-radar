@@ -61,6 +61,13 @@ const TOPICS: Record<string, { title: string; intro: string; items: Item[] }> = 
       ["Taux d'investissement", "La part moyenne du capital réellement placée. S'il est faible, la stratégie est souvent restée en liquidités."],
       ["Sorties au stop", "La part des positions vendues sur leur stop plutôt qu'à l'échéance."],
       ["Limites", "Les sociétés sorties de l'indice ne sont pas testées (résultats embellis), et ni les fondamentaux ni l'actualité ne sont rejoués."],
+      ["Validation walk-forward", "Un test plus sévère que le backtest. Le réglage de chaque stratégie est choisi sur 3 ans, puis appliqué à l'année suivante, qu'il n'a jamais vue. On avance d'un an et on recommence. Seules les années de test comptent : un réglage qui n'a marché que par hasard ne tient pas cette épreuve."],
+      ["Momentum 12 mois", "Acheter les titres qui ont le plus monté sur un an, en ignorant le dernier mois."],
+      ["Faible volatilité", "Acheter les titres dont le cours varie le moins."],
+      ["Sélection automatique", "Chaque année, suit la stratégie qui avait le mieux marché sur les 3 années précédentes. C'est ce que donnerait le réflexe de se fier au meilleur backtest."],
+      ["Années gagnées", "Le nombre d'années de test où la stratégie a fait mieux que l'ETF."],
+      ["Rotation", "La part du portefeuille vendue et rachetée chaque année. À 200 %, tout le portefeuille change deux fois par an, et les frais suivent."],
+      ["Verdict", "Une stratégie n'est retenue que si elle bat à la fois l'ETF et l'univers équipondéré en rendement annualisé, et l'ETF au moins 6 années sur 10. La règle est fixée avant de voir les résultats."],
     ],
   },
 };

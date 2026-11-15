@@ -182,6 +182,25 @@ Conclusion : le score technique n'a pas d'avantage démontré sur cette période
 de gain affichées sur les cartes restent valables comme statistiques descriptives du passé,
 mais rien ne montre qu'elles se réalisent en stratégie.
 
+## Validation walk-forward
+
+`analysis/walkforward.py` teste quatre stratégies à faible rotation — momentum 12 mois, faible
+volatilité, leur combinaison, et le score PEA Radar — sous forme de portefeuilles équipondérés
+des 10 ou 20 meilleurs titres, rééquilibrés chaque mois ou chaque trimestre.
+
+Le réglage de chaque stratégie est choisi sur 3 ans (meilleur ratio de Sharpe), puis appliqué à
+l'année suivante ; on avance d'un an et on recommence. Seules les années de test sont jugées.
+« Sélection automatique » suit chaque année la stratégie la mieux classée sur les 3 années
+précédentes.
+
+Règle de verdict, fixée à l'avance : une stratégie n'est retenue que si son rendement annualisé
+dépasse à la fois celui de l'ETF CAC 40 et celui de l'univers équipondéré, et qu'elle bat l'ETF
+au moins 60 % des années de test. L'univers équipondéré profite du même biais du survivant que
+les stratégies, d'où l'obligation de le battre lui aussi.
+
+L'écran Opportunités affiche un bandeau qui rappelle le résultat du dernier backtest : tant que
+le classement ne bat pas ses références, les cartes ne sont pas des recommandations d'achat.
+
 ## Limites connues
 
 - Les cours et fondamentaux viennent de Yahoo Finance (non officiel) ; la couverture des

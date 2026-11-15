@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { type Alert, api, eur, type Latest, type News, type Opportunity, pct, weeks } from "../api";
+import {
+  type Alert, api, type Backtest, eur, type Latest, type News, type Opportunity, pct, type WalkForward, weeks,
+} from "../api";
 import Tuto from "../Tuto";
 
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`;
@@ -126,10 +128,51 @@ function OpportunityCard({ o }: { o: Opportunity }) {
   );
 }
 
+/** Rappelle ce que le backtest a démontré, pour que les cartes ne promettent pas davantage. */
+function Validation({ bt, wf }: { bt: Backtest | null | undefined; wf: WalkForward | null }) {
+  if (bt === undefined) return null;
+  const m = bt?.status === "done" ? bt.result?.metrics : undefined;
+  const link = <Link to="/backtest">Voir le backtest</Link>;
+  if (!m) {
+    return (
+      <p className="card warn">
+        <strong>Score non validé.</strong> Aucun backtest n'a encore vérifié que ce classement fait mieux qu'un
+        simple ETF. Tant que ce n'est pas fait, ces cartes décrivent le passé et ne sont pas des recommandations
+        d'achat. {link}
+      </p>
+    );
+  }
+  const strat = m["Stratégie"].cagr_pct;
+  const refs = Object.entries(m).filter(([k]) => k !== "Stratégie");
+  const best = Math.max(...refs.map(([, v]) => v.cagr_pct));
+  const winners = wf?.status === "done" ? wf.result?.winners ?? [] : null;
+  if (strat > best) {
+    return (
+      <p className="card ok">
+        <strong>Score validé par le dernier backtest</strong> ({pct(strat, 2)} par an, contre {pct(best, 2)} pour
+        la meilleure référence). Ce résultat reste embelli par le biais du survivant. {link}
+      </p>
+    );
+  }
+  return (
+    <p className="card warn">
+      <strong>Ces cartes ne sont pas des recommandations d'achat.</strong> Au dernier backtest, suivre ce
+      classement a rapporté {pct(strat, 2)} par an, contre{" "}
+      {refs.map(([k, v]) => `${pct(v.cagr_pct, 2)} pour ${k.replace(" (dividendes réinvestis)", "").replace("Univers", "l'univers").replace("ETF", "l'ETF")}`).join(" et ")}.
+      {winners && (winners.length
+        ? ` La validation walk-forward retient en revanche : ${winners.join(", ")}.`
+        : " La validation walk-forward ne retient aucune stratégie non plus.")}{" "}
+      {link}
+    </p>
+  );
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<Latest | null>(null);
   const [error, setError] = useState("");
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [bt, setBt] = useState<Backtest | null | undefined>(undefined);
+  const [wf, setWf] = useState<WalkForward | null>(null);
   const timer = useRef<number | undefined>(undefined);
 
   const load = useCallback(async () => {
@@ -146,6 +189,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     load();
+    api.get<Backtest | null>("/backtests/latest").then(setBt).catch(() => setBt(null));
+    api.get<WalkForward | null>("/backtests/walkforward/latest").then(setWf).catch(() => undefined);
     return () => window.clearTimeout(timer.current);
   }, [load]);
 
@@ -182,6 +227,7 @@ export default function Dashboard() {
           </button>
         </div>
       </section>
+      <Validation bt={bt} wf={wf} />
       {regime && (
         <p className={`card ${regime.favorable ? "ok" : "warn"}`}>
           <strong>Marché {regime.favorable ? "favorable" : "défavorable"}</strong> : le {regime.index} est{" "}

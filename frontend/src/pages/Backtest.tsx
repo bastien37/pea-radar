@@ -2,6 +2,7 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, type Backtest as Bt, type BacktestParams, type BtTrade, pct } from "../api";
 import Tuto from "../Tuto";
+import WalkForward from "./WalkForward";
 
 const fr = (n: number) => n.toLocaleString("fr-FR");
 const COLORS = ["#3ecf8e", "#4da3ff", "#f5a524"];
@@ -178,6 +179,8 @@ export default function Backtest() {
           <ul className="card muted small notes">{r.notes.map((n) => <li key={n}>{n}</li>)}</ul>
         </>
       )}
+      <hr />
+      <WalkForward />
     </>
   );
 }

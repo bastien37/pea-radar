@@ -174,3 +174,23 @@ export interface Backtest {
   id: number; status: "pending" | "running" | "done" | "failed"; error: string | null;
   params: BacktestParams; result: BacktestResult | null; finished_at: string | null;
 }
+
+export interface WfStrategy extends Metrics {
+  name: string; reference: boolean; years_won: number | null; years: number;
+  turnover_pct_per_year: number | null; beats_reference: boolean | null;
+}
+
+export interface WalkForwardResult {
+  params: { years: number; train_years: number; fee_rate: number };
+  period: { start: string; end: string; tickers: number; test_years: number };
+  reference: string; rule: string; strategies: WfStrategy[]; winners: string[];
+  yearly: ({ year: number } & Record<string, number>)[];
+  choices: ({ year: number } & Record<string, string | number>)[];
+  curve: ({ date: string } & Record<string, number | string>)[];
+  notes: string[];
+}
+
+export interface WalkForward {
+  id: number; status: "pending" | "running" | "done" | "failed"; error: string | null;
+  result: WalkForwardResult | null; finished_at: string | null;
+}
