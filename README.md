@@ -156,6 +156,32 @@ fondamentaux et actualités non rejoués, exécution sans décalage de cours.
   sortie du modèle validée par un schéma strict et bornée avant d'influencer le score.
 - OpenAPI/Swagger désactivés en production.
 
+## Résultat du backtest (novembre 2026, cours réels)
+
+Premier backtest sur 10 ans (2016-2026, 111 titres, réglages par défaut : 5 lignes,
+40 séances de détention, stop 2 × ATR, revue toutes les 5 séances, frais 0,5 %) :
+
+| | Rendement annualisé | Perte maximale | Sharpe |
+|---|---|---|---|
+| Stratégie | **−2,6 %** | 46,7 % | −0,18 |
+| Univers équipondéré | +10,4 % | 40,4 % | 0,66 |
+| ETF CAC 40 | +9,2 % | 38,5 % | 0,60 |
+
+**Le score ne bat pas l'achat de l'indice.** Positions gagnantes : 34 %, 62 % sorties au stop,
+résultat moyen par position −0,3 %.
+
+Deux variantes pour comprendre :
+
+- **Sans stop** (2 × ATR → 10 × ATR) : −2,6 % par an, inchangé. Le stop n'est pas la cause ;
+  les positions gagnantes passent à 49 %, soit un pile ou face.
+- **Rotation lente** (détention 120 séances, revue toutes les 20 séances, sans stop) : +4,3 %
+  par an, 75 ordres au lieu de 349. Les frais et la rotation coûtaient environ 7 points par an,
+  mais même corrigé, le résultat reste sous l'indice.
+
+Conclusion : le score technique n'a pas d'avantage démontré sur cette période. Les estimations
+de gain affichées sur les cartes restent valables comme statistiques descriptives du passé,
+mais rien ne montre qu'elles se réalisent en stratégie.
+
 ## Limites connues
 
 - Les cours et fondamentaux viennent de Yahoo Finance (non officiel) ; la couverture des

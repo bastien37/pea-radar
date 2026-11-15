@@ -48,7 +48,6 @@ AYV.PA,Ayvens,Finance,1
 BB.PA,Bic,Consommation,1
 BIM.PA,bioMérieux,Santé,1
 BOL.PA,Bolloré,Télécoms & Médias,1
-CAN.PA,Canal+,Télécoms & Médias,1
 CARM.PA,Carmila,Immobilier,0
 COFA.PA,Coface,Assurance,1
 COV.PA,Covivio,Immobilier,0
@@ -86,7 +85,7 @@ MRN.PA,Mersen,Industrie,1
 MMT.PA,M6 Métropole Télévision,Télécoms & Médias,1
 NEX.PA,Nexans,Industrie,1
 NXI.PA,Nexity,Construction & Infrastructures,1
-POM.PA,OPmobility,Automobile,1
+OPM.PA,OPmobility,Automobile,1
 OVH.PA,OVHcloud,Technologie,1
 PEUG.PA,Peugeot Invest,Finance,1
 PLNW.PA,Planisware,Technologie,1
