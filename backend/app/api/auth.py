@@ -85,6 +85,25 @@ def logout(response: Response, user: User = Depends(get_current_user),
     clear_session_cookie(response)
 
 
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
+@router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(body: PasswordChange, request: Request, response: Response,
+                    user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> None:
+    _throttle(request, user.email)
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Mot de passe actuel incorrect")
+    if body.new_password == body.current_password:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Le nouveau mot de passe doit être différent")
+    user.password_hash = hash_password(body.new_password)
+    user.token_version += 1  # déconnecte toutes les autres sessions
+    db.commit()
+    set_session_cookie(response, create_token(user))  # et conserve celle-ci
+
+
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)) -> User:
     return user

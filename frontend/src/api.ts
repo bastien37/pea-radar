@@ -88,7 +88,7 @@ export interface EtfRow {
 
 export interface ScanResult extends ScanInfo {
   opportunities: Opportunity[]; ranking: RankRow[];
-  market: { regime: Regime | null; etfs: EtfRow[] };
+  market: { regime: Regime | null; etfs: EtfRow[]; issues: { ticker: string; name: string; reason: string }[] };
 }
 
 export interface Alert { id: number; kind: string; ticker: string; message: string; read: boolean; created_at: string }
@@ -110,7 +110,7 @@ export interface Tax {
 
 export interface Portfolio {
   initial_cash: number; cash: number; invested: number; total_value: number;
-  performance_pct: number; realized_pnl: number; fees_paid: number; fee_rate: number;
+  performance_pct: number; realized_pnl: number; fees_paid: number; fee_rate: number; fee_label: string;
   auto_follow: boolean; auto_follow_positions: number; tax: Tax;
   positions: Position[];
 }
@@ -196,17 +196,32 @@ export interface WalkForward {
 }
 
 export interface EtfStat {
-  ticker: string; name: string; index: string; available: boolean; price?: number; since?: string;
-  history_years?: number; perf_1y_pct?: number | null; perf_3y_pct?: number | null;
-  perf_5y_pct?: number | null; perf_10y_pct?: number | null; perf_all_pct?: number | null;
+  ticker: string; name: string; kind: "etf" | "indice"; index: string; available: boolean;
+  price?: number; since?: string; history_years?: number;
+  perf_1y_pct?: number | null; perf_3y_pct?: number | null; perf_5y_pct?: number | null;
+  perf_10y_pct?: number | null; perf_20y_pct?: number | null;
   volatility_pct?: number; max_drawdown_pct?: number;
 }
 
+export interface Allocation { ticker: string; weight: number }
+export interface Fees { rate: number; minimum: number; fixed: number }
+
 export interface Plan {
-  ticker: string; name: string; months: number; requested_months: number; start: string; end: string;
+  name: string; months: number; requested_months: number; start: string; end: string;
   invested: number; final_value: number; gain: number; gain_pct: number; annual_return_pct: number | null;
-  fees: number; fee_rate: number; tax_rate_pct: number; tax: number; net_gain: number; net_value: number;
+  fees: number; fee_label: string; rebalanced: boolean;
+  tax_rate_pct: number; tax: number; net_gain: number; net_value: number;
   after_5_years: boolean; worst_point: { date: string; gap_pct: number };
-  windows: { count: number; worst_pct: number; median_pct: number; best_pct: number; loss_share: number } | null;
+  windows: {
+    count: number; worst_pct: number; median_pct: number; best_pct: number; loss_share: number;
+    worst_start: string; best_start: string; series: { start: string; pct: number }[];
+  } | null;
   curve: { date: string; invested: number; value: number }[];
+}
+
+export interface Goal {
+  name: string; target: number; target_nominal: number; years: number; initial: number;
+  inflation_pct: number; tax_rate_pct: number; windows: number; history_start: string; fee_label: string;
+  scenarios: { label: string; note: string; monthly: number; invested: number }[];
+  worst_case_monthly: number;
 }

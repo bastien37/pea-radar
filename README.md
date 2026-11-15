@@ -37,7 +37,15 @@ Le premier scan télécharge 15 ans de cours et prend quelques minutes ; les sui
 Production : `npm run build` puis lancer uniquement le back-end, qui sert `frontend/dist`.
 Définir `ENVIRONMENT=prod`, `SECRET_KEY`, `COOKIE_SECURE=true` et placer le tout derrière HTTPS.
 
-Tests : `cd backend && uv run pytest && uv run ruff check .` (aussi lancés par GitHub Actions).
+Docker : créer un `.env` à la racine (`SECRET_KEY`, `OPENROUTER_API_KEY`), puis
+`docker compose up -d --build` et ouvrir http://localhost:8000. Voir `docker-compose.yml` pour
+l'option PostgreSQL.
+
+En développement, si `SECRET_KEY` est vide, une clé est créée une fois dans `backend/.secret_key`
+(non versionné) : les sessions survivent aux redémarrages du serveur.
+
+Tests : `cd backend && uv run pytest && uv run ruff check .` et `cd frontend && npm test`.
+GitHub Actions lance les deux, compile le front, construit l'image Docker et vérifie qu'elle démarre.
 
 ## Architecture
 
@@ -63,7 +71,8 @@ backend/   FastAPI, SQLAlchemy, Alembic, environnement uv
 | GET/POST | `/api/portfolio`, `/orders`, `/trades`, `/reset`, `/settings` | simulation |
 | POST/GET | `/api/backtests`, `/api/backtests/latest` | backtest |
 | POST/GET | `/api/backtests/walkforward`, `/walkforward/latest` | validation walk-forward |
-| GET/POST | `/api/etfs`, `/api/etfs/simulate` | statistiques des ETF, versements programmés |
+| GET/POST | `/api/etfs`, `/api/etfs/simulate`, `/api/etfs/goal` | ETF et indices, plans, mode objectif |
+| POST | `/api/auth/password` | changement de mot de passe (révoque les autres sessions) |
 | GET/POST | `/api/alerts`, `/api/alerts/read` | alertes |
 
 ## Méthode d'analyse
@@ -88,7 +97,8 @@ le risque de chaque titre monte d'un cran et le suivi automatique n'achète plus
 **Dates de résultats** : une publication dans les 10 jours est signalée sur la carte, et le
 suivi automatique n'achète pas le titre.
 
-**Gain et durée de détention** : le score est recalculé pour chaque jour de l'historique. On
+**Évolution passée et horizon observé** (affichés sur les cartes, sans valeur de prévision : voir
+le résultat du backtest) : le score est recalculé pour chaque jour de l'historique. On
 relève ce que le cours a fait 10, 20, 40, 60 et 90 séances après chaque jour où le score était
 comparable (≥ score actuel − 5), sur le titre lui-même s'il y a au moins 30 cas, sinon sur tout
 l'univers. Gain affiché = médiane ; fourchette = 1ᵉʳ au 3ᵉ quartile ; horizon retenu = celui qui
@@ -106,14 +116,22 @@ ne sont pas notés par le scan (voir « Écran ETF »).
 
 ## Écran ETF
 
-- **Tableau comparatif** : rendement annualisé sur 1, 3, 5 et 10 ans, volatilité, perte maximale
-  et date de début d'historique de chaque ETF.
-- **Versements programmés** (`services/etf.py`) : rejoue sur l'historique réel un plan
-  d'investissement mensuel (premier jour de bourse du mois), avec versement initial facultatif
-  et frais par ordre. Résultat : total versé, valeur finale, rendement annuel pondéré par les
-  dates de versement, net d'impôt selon l'âge du plan, pire moment par rapport aux sommes versées.
-- **Autres dates de départ** : le même plan est rejoué en le démarrant chaque mois de
-  l'historique ; pire, médian, meilleur résultat et part des plans terminés en perte.
+- **Tableaux comparatifs** : rendement annualisé sur 1, 3, 5 et 10 ans, volatilité, perte maximale
+  et début d'historique de chaque ETF ; et, à part, quatre indices (CAC 40, Euro Stoxx 50,
+  S&P 500, Nasdaq-100) dont l'historique complet couvre les crises de 2000 et de 2008. Les
+  indices ne sont pas achetables, ignorent les dividendes, et les indices américains sont en dollars.
+- **Versements programmés** (`services/etf.py`) : rejoue sur l'historique réel un plan mensuel
+  (premier jour de bourse du mois) sur 1 à 30 ans, avec versement initial facultatif.
+  Résultat : total versé, valeur finale, rendement annuel pondéré par les dates de versement,
+  net d'impôt selon l'âge du plan, pire moment par rapport aux sommes versées.
+- **Répartition** : jusqu'à quatre supports avec leurs pourcentages, rééquilibrage annuel en option.
+- **Frais** (`fees.py`) : pourcentage, minimum par ordre et forfait, combinables ; préréglages
+  dans l'écran, valeurs par défaut dans `.env` (`ORDER_FEE_RATE`, `ORDER_FEE_MIN`, `ORDER_FEE_FIXED`).
+- **Résultat selon la date de départ** : le même plan démarré chaque mois de l'historique, en
+  courbe, avec le pire, le médian, le meilleur résultat et la part des plans terminés en perte.
+- **Mode objectif** : pour une somme visée nette d'impôt et en euros d'aujourd'hui, calcule le
+  versement mensuel qui aurait suffi dans 9 périodes passées sur 10, une sur deux, ou seulement
+  les meilleures.
 - Dans la simulation, les positions en actions et en ETF sont listées séparément.
 
 ## Backtest
@@ -150,7 +168,11 @@ fondamentaux et actualités non rejoués, exécution sans décalage de cours.
   source ne répond pas, les derniers cours en base sont utilisés.
 - Sources : `yfinance`, puis en secours l'API « chart » de Yahoo interrogée directement. Les
   deux dépendent de Yahoo : le secours couvre une panne de la bibliothèque, pas de Yahoo.
-- PostgreSQL : `docker compose up -d`, `uv sync --extra postgres`, puis `DATABASE_URL` dans `.env`.
+- PostgreSQL : `uv sync --extra postgres` puis `DATABASE_URL` dans `.env` (ou le profil
+  `postgres` de `docker-compose.yml`).
+- Les indices (tickers commençant par `^`) sont téléchargés sur tout leur historique.
+- Les titres que le scan n'a pas pu noter (ticker périmé, cotation arrêtée) sont listés sous
+  le top, pour corriger `sbf120.csv`. La mise à jour de la liste reste manuelle.
 - Nouvelle migration après modification de `models.py` :
   `uv run alembic revision --autogenerate -m "description"`.
 

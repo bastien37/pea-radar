@@ -72,7 +72,7 @@ export default function Simulation() {
       <section className="toolbar">
         <div>
           <h1>Simulation</h1>
-          <p className="muted">Argent fictif · ordres au dernier cours de clôture · frais de {(pf.fee_rate * 100).toLocaleString("fr-FR")} % par ordre</p>
+          <p className="muted">Argent fictif · ordres au dernier cours de clôture · frais par ordre : {pf.fee_label}</p>
         </div>
         <div className="actions">
           <Tuto topic="simulation" />
@@ -104,7 +104,8 @@ export default function Simulation() {
           <span>
             <strong>Suivi automatique</strong>
             <span className="muted small"> — à chaque scan, vend les positions arrivées au stop, à l'objectif ou à l'échéance,
-              puis achète les meilleures opportunités ({pf.auto_follow_positions} lignes à parts égales).</span>
+              puis achète les actions les mieux classées ({pf.auto_follow_positions} lignes à parts égales).
+              À utiliser pour observer : le backtest n'a pas validé cette stratégie.</span>
           </span>
         </label>
         <label>Ouverture du PEA

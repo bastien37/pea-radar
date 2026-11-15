@@ -87,17 +87,17 @@ function OpportunityCard({ o }: { o: Opportunity }) {
       <div className="kpis">
         <div><span className="muted small">Risque</span><Risk level={o.risk_level} label={o.risk_label} /></div>
         <div>
-          <span className="muted small">Gain estimé (médiane)</span>
+          <span className="muted small">Évolution passée (médiane)</span>
           <strong className={o.expected_gain_pct >= 0 ? "pos" : "neg"}>{pct(o.expected_gain_pct)}</strong>
           <span className="muted small">de {pct(o.gain_low_pct)} à {pct(o.gain_high_pct)}</span>
         </div>
         <div>
-          <span className="muted small">Durée de détention</span>
+          <span className="muted small">Horizon observé</span>
           <strong>{o.holding_days} séances</strong>
           <span className="muted small">{weeks(o.holding_days)}</span>
         </div>
         <div>
-          <span className="muted small">Cas gagnants</span>
+          <span className="muted small">Hausses passées</span>
           <strong>{Math.round(o.win_rate * 100)} %</strong>
           <span className="muted small">stop suggéré {eur(o.stop_loss)}</span>
         </div>
@@ -120,7 +120,7 @@ function OpportunityCard({ o }: { o: Opportunity }) {
       <p className="muted small">
         {est.basis === "volatilité"
           ? "Historique insuffisant : estimation fondée sur la seule volatilité du titre."
-          : `Estimation tirée de ${est.samples} configurations passées comparables (${
+          : `Mesuré sur ${est.samples} configurations passées comparables (${
               est.basis === "titre" ? "sur ce titre" : "sur l'ensemble de l'univers"}).`}
       </p>
       <NewsBlock news={o.news} />
@@ -250,6 +250,14 @@ export default function Dashboard() {
       {result && (
         <>
           <div className="grid">{result.opportunities.map((o) => <OpportunityCard key={o.id} o={o} />)}</div>
+          {result.market?.issues?.length > 0 && (
+            <p className="card warn small">
+              <strong>{result.market.issues.length} titre{result.market.issues.length > 1 ? "s" : ""} non noté
+                {result.market.issues.length > 1 ? "s" : ""}</strong>, à vérifier dans{" "}
+              <code>backend/app/data/sbf120.csv</code> (ticker périmé, changement de nom ou retrait de la cote) :{" "}
+              {result.market.issues.map((i) => `${i.name} (${i.ticker}) — ${i.reason}`).join(" ; ")}.
+            </p>
+          )}
           <h2>Classement technique complet</h2>
           <div className="card scroll">
             <table>

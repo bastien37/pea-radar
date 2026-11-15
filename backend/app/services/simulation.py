@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.fees import default_fees
 from app.market.provider import get_provider
 from app.models import Opportunity, Portfolio, Position, Scan, Trade, User
 from app.universe import load_tradable
@@ -63,7 +64,7 @@ def place_order(db: Session, user: User, ticker: str, side: str, quantity: int,
     price, price_date = quote
     pf = get_portfolio(db, user)
     gross = price * quantity
-    fee = round(gross * get_settings().order_fee_rate, 2)
+    fee = round(default_fees().fee(gross), 2)
     pos = next((p for p in pf.positions if p.ticker == ticker), None)
     realized = None
 
@@ -157,7 +158,7 @@ def portfolio_view(db: Session, user: User) -> dict:
         "performance_pct": round((total / pf.initial_cash - 1) * 100, 2),
         "realized_pnl": round(sum(t.realized_pnl or 0 for t in pf.trades), 2),
         "fees_paid": round(sum(t.fee for t in pf.trades), 2),
-        "fee_rate": get_settings().order_fee_rate,
+        "fee_rate": get_settings().order_fee_rate, "fee_label": default_fees().label(),
         "auto_follow": pf.auto_follow,
         "auto_follow_positions": get_settings().auto_follow_positions,
         "tax": tax_view(pf, total),

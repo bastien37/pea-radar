@@ -275,42 +275,185 @@ def _monthly_series(prices):
 
 
 def test_plan_on_flat_price_only_loses_fees():
+    from app.fees import FeeModel
     from app.services.etf import simulate_plan
-    r = simulate_plan(_monthly_series([100] * 61), monthly=100, initial=0, years=5, fee_rate=0.01)
+    r = simulate_plan(_monthly_series([100] * 61), monthly=100, initial=0, years=5, fees=FeeModel(0.01))
     assert r["months"] == 60 and r["invested"] == 6000 and r["fees"] == 60
     assert r["final_value"] == 5940 and r["gain"] == -60 and r["tax"] == 0 and r["net_gain"] == -60
     assert r["annual_return_pct"] < 0 and len(r["curve"]) == 61
 
 
 def test_plan_gain_tax_and_money_weighted_return():
+    from app.fees import FeeModel
     from app.services.etf import simulate_plan
     prices = [100 * 1.01 ** i for i in range(73)]  # +1 % par mois, soit 12,68 % par an
-    r = simulate_plan(_monthly_series(prices), monthly=200, initial=1000, years=6, fee_rate=0.0)
+    r = simulate_plan(_monthly_series(prices), monthly=200, initial=1000, years=6, fees=FeeModel(0.0))
     assert r["invested"] == 1000 + 200 * 72 and r["after_5_years"] is True and r["tax_rate_pct"] == 18.6
     assert abs(r["annual_return_pct"] - 12.68) < 0.1  # retrouve le rendement de l'actif
     assert abs(r["tax"] - r["gain"] * 0.186) < 0.01 and abs(r["net_value"] - (r["final_value"] - r["tax"])) < 0.01
-    short = simulate_plan(_monthly_series(prices), monthly=200, initial=0, years=2, fee_rate=0.0)
+    short = simulate_plan(_monthly_series(prices), monthly=200, initial=0, years=2, fees=FeeModel(0.0))
     assert short["tax_rate_pct"] == 31.4 and short["windows"]["count"] == 73 - 24
     assert short["windows"]["loss_share"] == 0 and short["windows"]["worst_pct"] > 0
 
 
 def test_plan_reports_worst_point_and_shortened_history():
+    from app.fees import FeeModel
     from app.services.etf import simulate_plan
     prices = [100] * 12 + [50] * 6 + [100] * 19  # krach de 50 % puis retour
-    r = simulate_plan(_monthly_series(prices), monthly=100, initial=0, years=10, fee_rate=0.0)
+    r = simulate_plan(_monthly_series(prices), monthly=100, initial=0, years=10, fees=FeeModel(0.0))
     assert r["months"] == 36 and r["requested_months"] == 120  # historique plus court que demandé
     assert r["worst_point"]["gap_pct"] < -40 and r["gain"] > 0  # acheter pendant la baisse a payé
 
 
 def test_etf_api(auth_client):
     rows = auth_client.get("/api/etfs").json()
-    assert len(rows) == 8 and all(r["available"] for r in rows)
-    assert rows[0]["perf_5y_pct"] is not None and rows[0]["perf_10y_pct"] is None and rows[0]["max_drawdown_pct"] > 0
-    plan = {"ticker": "CW8.PA", "monthly": 200, "initial": 1000, "years": 8}
+    etfs, indices = [r for r in rows if r["kind"] == "etf"], [r for r in rows if r["kind"] == "indice"]
+    assert len(etfs) == 8 and len(indices) == 4 and all(r["available"] for r in rows)
+    assert etfs[0]["perf_5y_pct"] is not None and etfs[0]["perf_20y_pct"] is None
+    assert indices[0]["history_years"] > 30 and indices[0]["perf_20y_pct"] is not None  # historique long
+    plan = {"allocations": [{"ticker": "CW8.PA", "weight": 100}], "monthly": 200, "initial": 1000, "years": 8}
     r = auth_client.post("/api/etfs/simulate", json=plan).json()
-    assert r["invested"] == 1000 + 200 * 96 and r["windows"]["count"] > 12 and r["name"]
-    assert auth_client.post("/api/etfs/simulate", json={**plan, "ticker": "AIR.PA"}).status_code == 404
+    assert r["invested"] == 1000 + 200 * 96 and r["windows"]["count"] > 12 and r["name"] == "Amundi MSCI World Swap"
+    assert len(r["windows"]["series"]) == r["windows"]["count"] and r["windows"]["worst_start"]
+    stock = {**plan, "allocations": [{"ticker": "AIR.PA", "weight": 100}]}
+    assert auth_client.post("/api/etfs/simulate", json=stock).status_code == 404
     too_much = {**plan, "monthly": 5000, "years": 10}
     assert auth_client.post("/api/etfs/simulate", json=too_much).status_code == 422  # plafond du PEA
     auth_client.post("/api/portfolio/orders", json={"ticker": "CW8.PA", "side": "buy", "quantity": 1})
     assert auth_client.get("/api/portfolio").json()["positions"][0]["is_etf"] is True
+    index_order = {"ticker": "^FCHI", "side": "buy", "quantity": 1}
+    assert auth_client.post("/api/portfolio/orders", json=index_order).status_code == 422  # non achetable
+
+
+def test_long_plan_on_index_and_allocation_api(auth_client):
+    long = {"allocations": [{"ticker": "^FCHI", "weight": 100}], "monthly": 100, "years": 25}
+    r = auth_client.post("/api/etfs/simulate", json=long).json()
+    assert r["months"] == 300 and r["windows"]["count"] > 100
+    mix = {"allocations": [{"ticker": "CW8.PA", "weight": 70}, {"ticker": "PCEU.PA", "weight": 30}],
+           "monthly": 300, "years": 8, "rebalance": True, "fees": {"rate": 0.001, "minimum": 1}}
+    r = auth_client.post("/api/etfs/simulate", json=mix).json()
+    assert r["rebalanced"] is True and r["fee_label"] == "0,1 % (minimum 1 €)"
+    assert r["name"] == "70 % Amundi MSCI World Swap + 30 % Amundi PEA MSCI Europe"
+    bad = {**mix, "allocations": [{"ticker": "CW8.PA", "weight": 70}, {"ticker": "PCEU.PA", "weight": 20}]}
+    assert auth_client.post("/api/etfs/simulate", json=bad).status_code == 422
+    twice = {**mix, "allocations": [{"ticker": "CW8.PA", "weight": 50}] * 2}
+    assert auth_client.post("/api/etfs/simulate", json=twice).status_code == 422
+
+
+def test_fee_model():
+    from app.fees import FeeModel
+    f = FeeModel(rate=0.001, minimum=1.0, fixed=0.5)
+    assert f.fee(100) == 1.0 and f.fee(10_000) == 10.5 and f.fee(0) == 0 and f.fee(0.4) == 0.4
+    assert FeeModel(0.005).label() == "0,5 %" and FeeModel(0, fixed=2).label() == "2 € fixes"
+
+
+def test_minimum_fee_hurts_small_orders():
+    from app.fees import FeeModel
+    from app.services.etf import simulate_plan
+    flat = _monthly_series([100] * 61)
+    pct = simulate_plan(flat, monthly=50, initial=0, years=5, fees=FeeModel(0.005))
+    floor = simulate_plan(flat, monthly=50, initial=0, years=5, fees=FeeModel(0.005, minimum=2))
+    assert pct["fees"] == 15.0 and floor["fees"] == 120.0  # 0,25 € contre 2 € par ordre
+    assert floor["final_value"] == 3000 - 120
+
+
+def test_rebalancing_restores_weights_and_costs_fees():
+    from app.fees import FeeModel
+    from app.services.etf import simulate_plan
+    rising, flat = _monthly_series([100 * 1.03 ** i for i in range(37)]), _monthly_series([100] * 37)
+    closes = pd.DataFrame({"A": rising, "B": flat})
+    drift = simulate_plan(closes, 100, 0, 3, FeeModel(0.0), weights=[50, 50])
+    rebal = simulate_plan(closes, 100, 0, 3, FeeModel(0.0), weights=[50, 50], rebalance=True)
+    assert rebal["rebalanced"] and not drift["rebalanced"]
+    assert rebal["final_value"] < drift["final_value"]  # on a vendu ce qui montait
+    costly = simulate_plan(closes, 100, 0, 3, FeeModel(0.01), weights=[50, 50], rebalance=True)
+    plain = simulate_plan(closes, 100, 0, 3, FeeModel(0.01), weights=[50, 50])
+    assert costly["fees"] > plain["fees"] == 36.0
+    single = simulate_plan(rising, 100, 0, 3, FeeModel(0.0), rebalance=True)
+    assert single["rebalanced"] is False  # rien à rééquilibrer avec un seul support
+
+
+def test_goal_monthly_reaches_target_in_most_past_periods():
+    import numpy as np
+
+    from app.fees import FeeModel
+    from app.services.etf import goal_plan, simulate_plan
+    rng = np.random.default_rng(3)
+    closes = _monthly_series(100 * np.exp(np.cumsum(rng.normal(0.006, 0.04, 400)))).to_frame("X")
+    fees = FeeModel(0.002)
+    g = goal_plan(closes, target=50_000, years=10, initial=2_000, fees=fees, inflation_pct=2.0)
+    bad, mid, good = (x["monthly"] for x in g["scenarios"])
+    assert bad >= mid >= good > 0 and g["worst_case_monthly"] >= bad
+    assert abs(g["target_nominal"] - 50_000 * 1.02 ** 10) < 0.01 and g["tax_rate_pct"] == 18.6
+    # vérification croisée : avec le versement « défavorable », ~90 % des plans passés atteignent la cible nette
+    check = simulate_plan(closes, bad, 2_000, 10, fees)
+    invested = check["invested"]
+    nets = [invested * (1 + w["pct"] / 100) - max(invested * w["pct"] / 100, 0) * 0.186
+            for w in check["windows"]["series"]]
+    share = np.mean([n >= g["target_nominal"] - 1 for n in nets])
+    assert 0.85 <= share <= 0.95
+    import pytest
+    with pytest.raises(ValueError):
+        goal_plan(closes.iloc[:100], 50_000, 10, 0, fees, 2.0)  # historique trop court
+
+
+def test_goal_api(auth_client):
+    body = {"allocations": [{"ticker": "^GSPC", "weight": 100}], "target": 100000, "years": 15, "initial": 5000}
+    g = auth_client.post("/api/etfs/goal", json=body).json()
+    assert [s["label"] for s in g["scenarios"]] == ["Défavorable", "Médian", "Favorable"] and g["windows"] > 100
+    short = {**body, "allocations": [{"ticker": "CW8.PA", "weight": 100}]}
+    assert auth_client.post("/api/etfs/goal", json=short).status_code == 400  # 10 ans d'historique
+
+
+def test_change_password(auth_client):
+    from tests.conftest import CREDS, XHR
+    new = "un-nouveau-mot-de-passe"
+    wrong = {"current_password": "pas-le-bon-mot-de-passe", "new_password": new}
+    assert auth_client.post("/api/auth/password", json=wrong).status_code == 403
+    same = {"current_password": CREDS["password"], "new_password": CREDS["password"]}
+    assert auth_client.post("/api/auth/password", json=same).status_code == 400
+    weak = {"current_password": CREDS["password"], "new_password": "court"}
+    assert auth_client.post("/api/auth/password", json=weak).status_code == 422
+    old_cookie = auth_client.cookies.get("pea_session")
+    ok = {"current_password": CREDS["password"], "new_password": new}
+    assert auth_client.post("/api/auth/password", json=ok).status_code == 204
+    assert auth_client.get("/api/auth/me").status_code == 200  # la session courante est conservée
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.security import rate_limiter
+    rate_limiter.reset()  # les essais ci-dessus ont consommé le quota de tentatives de ce compte
+    with TestClient(app, headers=XHR) as other:
+        other.cookies.set("pea_session", old_cookie, path="/api")
+        assert other.get("/api/auth/me").status_code == 401  # les autres sessions sont révoquées
+        assert other.post("/api/auth/login", json=CREDS).status_code == 401
+        assert other.post("/api/auth/login", json={**CREDS, "password": new}).status_code == 200
+
+
+def test_scan_reports_unusable_tickers(auth_client, monkeypatch):
+    real = get_provider().inner.history
+
+    def broken(tickers):
+        out = real(tickers)
+        out.pop("AIR.PA", None)  # ticker disparu
+        if "BNP.PA" in out:
+            out["BNP.PA"] = out["BNP.PA"].iloc[:-30]  # cotation arrêtée
+        return out
+
+    monkeypatch.setattr(get_provider().inner, "history", broken)
+    auth_client.post("/api/scans")
+    issues = {i["ticker"]: i["reason"] for i in auth_client.get("/api/scans/latest").json()["result"]["market"]["issues"]}
+    assert issues["AIR.PA"] == "aucun cours trouvé" and issues["BNP.PA"].startswith("cours arrêtés au")
+    assert len(issues) == 2
+
+
+def test_dev_secret_persists_across_restarts(tmp_path, monkeypatch):
+    import app.config as config
+    monkeypatch.setattr(config, "DEV_SECRET_FILE", tmp_path / ".secret_key")
+    first = config.Settings(secret_key=None, _env_file=None).signing_key()
+    again = config.Settings(secret_key=None, _env_file=None).signing_key()
+    assert first == again and len(first) >= 32
+    assert (tmp_path / ".secret_key").stat().st_mode & 0o077 == 0  # lisible par le seul propriétaire
+    import pytest
+    with pytest.raises(RuntimeError):
+        config.Settings(secret_key=None, environment="prod", _env_file=None).signing_key()

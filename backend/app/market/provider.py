@@ -17,6 +17,14 @@ from app.models import PriceBar, PriceMeta, utcnow
 
 log = logging.getLogger(__name__)
 COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
+INDEX_PERIOD = "max"  # les indices servent aux tests sur longue durée (crises de 2000 et 2008)
+
+
+def _by_period(tickers: list[str], period: str) -> dict[str, list[str]]:
+    groups: dict[str, list[str]] = {}
+    for t in tickers:
+        groups.setdefault(INDEX_PERIOD if t.startswith("^") else period, []).append(t)
+    return groups
 
 
 class MarketDataProvider(Protocol):
@@ -33,10 +41,11 @@ class YFinanceProvider:
         import yfinance as yf
 
         out: dict[str, pd.DataFrame] = {}
-        for i in range(0, len(tickers), 40):  # lots pour ménager l'API Yahoo
-            chunk = tickers[i : i + 40]
+        chunks = [(period, group[i : i + 40]) for period, group in _by_period(tickers, self.period).items()
+                  for i in range(0, len(group), 40)]  # lots pour ménager l'API Yahoo
+        for period, chunk in chunks:
             raw = yf.download(
-                chunk, period=self.period, interval="1d", auto_adjust=True,
+                chunk, period=period, interval="1d", auto_adjust=True,
                 group_by="ticker", threads=True, progress=False,
             )
             if raw is None or raw.empty:
@@ -67,7 +76,8 @@ class YahooChartProvider:
 
     def _one(self, client: httpx.Client, ticker: str) -> pd.DataFrame | None:
         r = client.get(self.URL.format(ticker=ticker),
-                       params={"range": self.period, "interval": "1d", "events": "div,splits"})
+                       params={"range": INDEX_PERIOD if ticker.startswith("^") else self.period,
+                               "interval": "1d", "events": "div,splits"})
         r.raise_for_status()
         res = r.json()["chart"]["result"][0]
         quote = res["indicators"]["quote"][0]
@@ -116,24 +126,25 @@ class FallbackProvider:
 class SyntheticProvider:
     """Marche aléatoire déterministe par ticker — démonstration hors ligne et tests uniquement."""
 
-    def __init__(self, days: int = 2600) -> None:
-        self.days = days
+    def __init__(self, days: int = 2600, index_days: int = 9000) -> None:
+        self.days, self.index_days = days, index_days
 
     def history(self, tickers: list[str]) -> dict[str, pd.DataFrame]:
-        idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=self.days)
         out = {}
         for t in tickers:
+            days = self.index_days if t.startswith("^") else self.days
+            idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=days)
             rng = np.random.default_rng(zlib.crc32(t.encode()))
             drift, vol = rng.uniform(-0.0002, 0.0006), rng.uniform(0.008, 0.03)
-            close = rng.uniform(10, 300) * np.exp(np.cumsum(rng.normal(drift, vol, self.days)))
-            spread = np.abs(rng.normal(0, vol / 2, self.days))
+            close = rng.uniform(10, 300) * np.exp(np.cumsum(rng.normal(drift, vol, days)))
+            spread = np.abs(rng.normal(0, vol / 2, days))
             out[t] = pd.DataFrame(
                 {
-                    "Open": close * (1 + rng.normal(0, vol / 3, self.days)),
+                    "Open": close * (1 + rng.normal(0, vol / 3, days)),
                     "High": close * (1 + spread),
                     "Low": close * (1 - spread),
                     "Close": close,
-                    "Volume": rng.integers(50_000, 2_000_000, self.days).astype(float),
+                    "Volume": rng.integers(50_000, 2_000_000, days).astype(float),
                 },
                 index=idx,
             )

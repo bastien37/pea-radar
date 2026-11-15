@@ -77,3 +77,10 @@ dialog.tuto dt { font-weight: 600; } dialog.tuto dd { margin: .15rem 0 0; color:
 hr { border: 0; border-top: 1px solid var(--line); margin: 2.5rem 0 1.5rem; }
 details.card summary { cursor: pointer; }
 .stats > div:not(.card) { display: flex; flex-direction: column; }
+.plan { display: grid; gap: 1rem; }
+fieldset { border: 1px solid var(--line); border-radius: 8px; padding: .6rem .8rem; margin: 0; display: grid; gap: .5rem; }
+legend { color: var(--muted); font-size: .85rem; padding: 0 .3rem; }
+.alloc { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.alloc select { flex: 1; min-width: 220px; margin: 0; } .alloc input[type=number] { width: 90px; margin: 0; }
+.account { max-width: 420px; display: grid; gap: .8rem; }
+code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 .3rem; }

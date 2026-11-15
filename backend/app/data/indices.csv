@@ -1,0 +1,5 @@
+ticker,name,note
+^FCHI,CAC 40,en euros
+^STOXX50E,Euro Stoxx 50,en euros
+^GSPC,S&P 500,en dollars
+^NDX,Nasdaq-100,en dollars

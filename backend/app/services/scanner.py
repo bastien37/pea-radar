@@ -169,6 +169,26 @@ def apply_context(opp: dict, news: dict, market: dict | None = None) -> dict:
     return opp
 
 
+def universe_issues(histories: dict[str, pd.DataFrame], ranking: list[dict]) -> list[dict]:
+    """Titres de l'univers que le scan n'a pas pu noter, avec la raison : sert à repérer les
+    tickers périmés (changement de nom, retrait de la cote) à corriger dans sbf120.csv."""
+    ranked = {r["ticker"] for r in ranking}
+    newest = max((df.index[-1] for df in histories.values() if len(df)), default=None)
+    issues = []
+    for ticker, stock in load_universe().items():
+        df = histories.get(ticker)
+        if df is None or df.empty:
+            reason = "aucun cours trouvé"
+        elif newest is not None and (newest - df.index[-1]).days > 10:
+            reason = f"cours arrêtés au {df.index[-1].date()}"
+        elif ticker not in ranked:
+            reason = "historique trop court pour être noté"
+        else:
+            continue
+        issues.append({"ticker": ticker, "name": stock.name, "reason": reason})
+    return issues
+
+
 def _set(scan_id: int, **fields) -> None:
     with SessionLocal() as db:
         scan = db.get(Scan, scan_id)
@@ -211,7 +231,8 @@ def run_scan(scan_id: int) -> None:
         with SessionLocal() as db:
             scan = db.get(Scan, scan_id)
             scan.ranking = ranking
-            scan.market = {"regime": market, "etfs": etf_table(histories)}
+            scan.market = {"regime": market, "etfs": etf_table(histories),
+                           "issues": universe_issues(histories, ranking)}
             scan.opportunities = [Opportunity(rank=i, **o) for i, o in enumerate(opps, 1)]
             scan.status, scan.progress, scan.finished_at = "done", "Terminé", utcnow()
             db.commit()

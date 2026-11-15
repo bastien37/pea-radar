@@ -36,4 +36,21 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm test
       - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t pea-radar .
+      - name: Démarrage de l'image et test de vie
+        run: |
+          docker run -d --name app -p 8000:8000 \
+            -e SECRET_KEY="$(openssl rand -base64 48)" -e DATA_PROVIDER=synthetic pea-radar
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:8000/api/health && break || sleep 2
+          done
+          curl -fsS http://localhost:8000/api/health
+          curl -fsS http://localhost:8000/ | grep -q "PEA Radar"
+          docker logs app

@@ -1,18 +1,36 @@
-# Facultatif : PostgreSQL à la place de SQLite.
-#   docker compose up -d
-#   cd backend && uv sync --extra postgres
-#   DATABASE_URL=postgresql+psycopg://pea:change-moi@localhost:5432/pea_radar dans .env
+# Lancer l'application en une commande :
+#   1. créer un fichier .env à côté de ce fichier avec au minimum
+#        SECRET_KEY=<48 caractères aléatoires>
+#        OPENROUTER_API_KEY=<clé OpenRouter>
+#   2. docker compose up -d --build
+#   3. ouvrir http://localhost:8000
+#
+# PostgreSQL à la place de SQLite : docker compose --profile postgres up -d --build
+# et ajouter au .env  DATABASE_URL=postgresql+psycopg://pea:<mot de passe>@db:5432/pea_radar
+# ainsi que           POSTGRES_PASSWORD=<mot de passe>
 services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      COOKIE_SECURE: "false"  # passer à true derrière un proxy HTTPS
+    ports:
+      - "127.0.0.1:8000:8000"  # accessible uniquement depuis la machine
+    volumes:
+      - pea_radar_data:/data
+    restart: unless-stopped
+
   db:
+    profiles: [postgres]
     image: postgres:17
     environment:
       POSTGRES_USER: pea
-      POSTGRES_PASSWORD: change-moi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD dans .env}
       POSTGRES_DB: pea_radar
-    ports:
-      - "127.0.0.1:5432:5432"  # accessible uniquement depuis la machine
     volumes:
       - pea_radar_db:/var/lib/postgresql/data
+    restart: unless-stopped
 
 volumes:
+  pea_radar_data:
   pea_radar_db:

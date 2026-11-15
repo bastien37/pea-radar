@@ -44,5 +44,12 @@ def load_etfs() -> dict[str, Stock]:
 
 
 @lru_cache
+def load_indices() -> dict[str, Stock]:
+    """Indices : historique long pour éprouver un plan sur des crises, non achetables."""
+    return {r["ticker"]: Stock(r["ticker"], r["name"], f"Indice {r['note']}", pea=False)
+            for r in _read("indices.csv")}
+
+
+@lru_cache
 def load_tradable() -> dict[str, Stock]:
     return {**load_universe(), **load_etfs()}

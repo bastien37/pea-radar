@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api, type User } from "./api";
+import Account from "./pages/Account";
 import Backtest from "./pages/Backtest";
 import Dashboard from "./pages/Dashboard";
 import Etf from "./pages/Etf";
@@ -30,7 +31,7 @@ export default function App() {
           <NavLink to="/simulation">Simulation</NavLink>
           <NavLink to="/backtest">Backtest</NavLink>
         </nav>
-        <span className="muted small">{user.email}</span>
+        <NavLink to="/compte" className="muted small">{user.email}</NavLink>
         <button className="ghost" onClick={logout}>Déconnexion</button>
       </header>
       <main>
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/etf" element={<Etf />} />
           <Route path="/simulation" element={<Simulation />} />
           <Route path="/backtest" element={<Backtest />} />
+          <Route path="/compte" element={<Account />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

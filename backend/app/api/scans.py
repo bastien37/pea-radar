@@ -34,7 +34,7 @@ def _scan_out(scan: Scan, full: bool = True) -> dict:
     if full:
         out["opportunities"] = [_opp_out(o) for o in scan.opportunities]
         out["ranking"] = scan.ranking
-        out["market"] = scan.market or {"regime": None, "etfs": []}
+        out["market"] = {"regime": None, "etfs": [], "issues": [], **(scan.market or {})}
     return out
 
 

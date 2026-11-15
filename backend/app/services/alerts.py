@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import SessionLocal
+from app.fees import default_fees
 from app.market.provider import get_provider
 from app.models import Alert, Scan, User
 from app.services import simulation as sim
@@ -60,7 +61,8 @@ def _auto_follow(db: Session, user: User, scan: Scan, created: list[Alert]) -> N
         if opp.ticker in held or opp.ticker in just_sold or quote is None \
                 or opp.details.get("earnings_warning") or opp.expected_gain_pct <= 0:
             continue
-        qty = math.floor(min(budget, pf.cash) / (quote[0] * (1 + s.order_fee_rate)))
+        spend = min(budget, pf.cash)
+        qty = math.floor((spend - default_fees().fee(spend)) / quote[0])
         if qty < 1:
             continue
         try:

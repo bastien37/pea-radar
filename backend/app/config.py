@@ -1,15 +1,18 @@
 """Configuration centralisée, lue depuis l'environnement / le fichier .env."""
 
 import logging
+import os
 import re
 import secrets
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 log = logging.getLogger(__name__)
+DEV_SECRET_FILE = Path(__file__).resolve().parents[1] / ".secret_key"
 
 
 class Settings(BaseSettings):
@@ -62,7 +65,9 @@ class Settings(BaseSettings):
 
     # --- Simulation ---
     default_initial_cash: float = 10_000.0
-    order_fee_rate: float = 0.005  # 0,5 % par ordre
+    order_fee_rate: float = Field(default=0.005, ge=0, le=0.05)  # 0,5 % par ordre
+    order_fee_min: float = Field(default=0.0, ge=0, le=50)  # minimum par ordre, en euros
+    order_fee_fixed: float = Field(default=0.0, ge=0, le=50)  # forfait par ordre, en euros
 
     @field_validator("secret_key", "openrouter_api_key", "smtp_password", mode="before")
     @classmethod
@@ -87,9 +92,27 @@ class Settings(BaseSettings):
         if self.secret_key is None:
             if self.environment == "prod":
                 raise RuntimeError("SECRET_KEY est obligatoire en production")
-            log.warning("SECRET_KEY absente : clé éphémère générée (sessions perdues au redémarrage)")
-            self.secret_key = SecretStr(secrets.token_urlsafe(48))
+            self.secret_key = SecretStr(_dev_secret())
         return self.secret_key.get_secret_value()
+
+
+def _dev_secret() -> str:
+    """En développement, la clé est conservée dans un fichier local (non versionné, lisible par
+    le seul propriétaire) pour que les sessions survivent aux redémarrages du serveur."""
+    try:
+        if DEV_SECRET_FILE.exists():
+            key = DEV_SECRET_FILE.read_text(encoding="utf-8").strip()
+            if len(key) >= 32:
+                return key
+        key = secrets.token_urlsafe(48)
+        fd = os.open(DEV_SECRET_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(key)
+        log.warning("SECRET_KEY absente : clé de développement créée dans %s", DEV_SECRET_FILE.name)
+        return key
+    except OSError:
+        log.warning("SECRET_KEY absente : clé éphémère générée (sessions perdues au redémarrage)")
+        return secrets.token_urlsafe(48)
 
 
 @lru_cache
